@@ -1,0 +1,1929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyberDefense Architect — Interactive Security Simulator</title>
+<meta name="description" content="Stateless, browser-based defence-in-depth simulator mapped to MITRE ATT&amp;CK. Toggle security controls and watch the attack chain break.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,400..900&family=DM+Sans:opsz,wght@9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   CyberDefense Architect — v1.3.0
+   Design tokens. Light base only. Layer hue ramp encodes defence depth
+   (outermost = cobalt, innermost = crimson-pink). Outcome semantics are a
+   separate, non-overlapping triad: emerald / amber / vermilion.
+   ========================================================================= */
+:root{
+  --paper:#F4F6FB;
+  --paper-2:#EAEEF7;
+  --surface:#FFFFFF;
+  --ink:#0C1220;
+  --ink-2:#3B4761;
+  --ink-3:#6E7A96;
+  --ink-4:#9AA4BC;
+  --line:#DCE2EF;
+  --line-2:#C3CCE1;
+
+  --blocked:#03795A;
+  --blocked-bg:#E2F6EF;
+  --alert:#A85A06;
+  --alert-bg:#FDF0DD;
+  --breach:#D42011;
+  --breach-bg:#FDE7E4;
+
+  --l-perimeter:#1D4ED8;
+  --l-identity:#5B34D6;
+  --l-network:#8B2FC9;
+  --l-compute:#B32A9D;
+  --l-data:#C9257A;
+
+  --r-sm:8px; --r:12px; --r-lg:18px; --r-xl:26px;
+  --sh-1:0 1px 2px rgba(12,18,32,.06), 0 2px 6px rgba(12,18,32,.05);
+  --sh-2:0 2px 4px rgba(12,18,32,.06), 0 12px 28px rgba(12,18,32,.10);
+  --sh-3:0 24px 70px rgba(12,18,32,.22);
+  --ff-display:"Archivo","Archivo Expanded",-apple-system,"Segoe UI",sans-serif;
+  --ff-body:"DM Sans",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+  --rail-l:298px;
+  --rail-r:352px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--ff-body);
+  background:var(--paper);
+  color:var(--ink);
+  font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+h1,h2,h3,h4{font-family:var(--ff-display);margin:0;letter-spacing:-.02em;font-weight:800}
+button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--l-perimeter);outline-offset:2px;border-radius:4px}
+.svg-defs{position:absolute;width:0;height:0;overflow:hidden}
+.ic{width:1em;height:1em;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mono{font-family:var(--ff-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- eyebrow / label type ---------- */
+.eyebrow{
+  font-family:var(--ff-mono);font-size:10px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
+}
+
+/* ============================ MASTHEAD ================================== */
+.masthead{
+  position:sticky;top:0;z-index:60;
+  background:var(--surface);
+  border-bottom:2px solid var(--ink);
+  display:flex;align-items:center;gap:18px;
+  padding:0 18px;height:66px;
+}
+.brand{display:flex;align-items:center;gap:11px;flex:0 0 auto}
+.brand-mark{
+  width:34px;height:34px;border-radius:10px;flex:0 0 auto;
+  background:linear-gradient(140deg,var(--l-perimeter),var(--l-network) 55%,var(--l-data));
+  display:grid;place-items:center;color:#fff;font-size:18px;
+  box-shadow:0 3px 0 rgba(12,18,32,.18);
+}
+.brand-txt h1{font-size:17px;line-height:1.05;font-stretch:112%;text-transform:uppercase;letter-spacing:-.01em}
+.brand-txt p{margin:1px 0 0;font-size:10.5px;color:var(--ink-3);font-family:var(--ff-mono);letter-spacing:.04em}
+.masthead-spacer{flex:1 1 auto}
+.mh-group{display:flex;align-items:center;gap:8px}
+.mh-sep{width:1px;height:30px;background:var(--line);flex:0 0 auto}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  height:36px;padding:0 13px;border-radius:10px;
+  border:1.5px solid var(--line-2);background:var(--surface);
+  font-weight:600;font-size:12.5px;color:var(--ink-2);
+  transition:transform .12s,box-shadow .12s,border-color .12s,background .12s;
+  white-space:nowrap;
+}
+.btn:hover{border-color:var(--ink-3);color:var(--ink);transform:translateY(-1px);box-shadow:var(--sh-1)}
+.btn:active{transform:translateY(0)}
+.btn .ic{width:15px;height:15px}
+.btn-primary{
+  background:var(--ink);border-color:var(--ink);color:#fff;
+  box-shadow:0 3px 0 rgba(12,18,32,.28);
+}
+.btn-primary:hover{background:#18213a;color:#fff;border-color:#18213a;box-shadow:0 5px 0 rgba(12,18,32,.24)}
+.btn-primary:active{box-shadow:0 1px 0 rgba(12,18,32,.28);transform:translateY(2px)}
+.btn-attack{background:var(--breach);border-color:var(--breach);color:#fff;box-shadow:0 3px 0 #96170C}
+.btn-attack:hover{background:#E62A1A;border-color:#E62A1A;color:#fff;box-shadow:0 5px 0 #96170C}
+.btn-attack:active{box-shadow:0 1px 0 #96170C;transform:translateY(2px)}
+.btn-sm{height:30px;padding:0 10px;font-size:11.5px;border-radius:8px}
+.btn-icon{width:36px;padding:0;justify-content:center}
+.btn[disabled]{opacity:.42;pointer-events:none}
+
+/* ---------- segmented control ---------- */
+.seg{display:inline-flex;background:var(--paper-2);border-radius:10px;padding:3px;gap:3px;border:1.5px solid var(--line)}
+.seg button{
+  border:0;background:transparent;height:28px;padding:0 11px;border-radius:7px;
+  font-size:11.5px;font-weight:700;color:var(--ink-3);letter-spacing:.01em;
+}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
+
+/* ============================ LAYOUT ==================================== */
+.shell{
+  display:grid;
+  grid-template-columns:var(--rail-l) minmax(0,1fr) var(--rail-r);
+  gap:14px;padding:14px;align-items:start;
+  max-width:1900px;margin:0 auto;
+}
+.rail{display:flex;flex-direction:column;gap:12px;position:sticky;top:80px;max-height:calc(100vh - 94px);overflow-y:auto;overscroll-behavior:contain;padding-bottom:6px}
+.rail::-webkit-scrollbar{width:9px}
+.rail::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px;border:3px solid var(--paper)}
+.stage-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+
+.panel{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1)}
+.panel-hd{
+  display:flex;align-items:center;gap:8px;
+  padding:12px 14px;border-bottom:1.5px solid var(--line);
+}
+.panel-hd h2{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-stretch:108%}
+.panel-hd .count{margin-left:auto;font-family:var(--ff-mono);font-size:11px;color:var(--ink-3);font-weight:600}
+.panel-bd{padding:12px 14px}
+.panel-bd.flush{padding:0}
+
+/* ============================ SCENARIOS ================================= */
+.scn-list{display:flex;flex-direction:column}
+.scn{
+  display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;
+  width:100%;text-align:left;border:0;background:transparent;
+  padding:11px 13px;border-bottom:1px solid var(--line);
+  transition:background .12s;
+}
+.scn:last-child{border-bottom:0}
+.scn:hover{background:var(--paper)}
+.scn-num{
+  font-family:var(--ff-mono);font-size:10.5px;font-weight:700;color:var(--ink-4);
+  border:1.5px solid var(--line);border-radius:7px;height:24px;
+  display:grid;place-items:center;margin-top:1px;
+}
+.scn-t{font-weight:700;font-size:12.8px;line-height:1.25;color:var(--ink-2)}
+.scn-s{font-size:11px;color:var(--ink-4);margin-top:2px;line-height:1.35}
+.scn[aria-pressed="true"]{background:var(--ink)}
+.scn[aria-pressed="true"] .scn-t{color:#fff}
+.scn[aria-pressed="true"] .scn-s{color:#A8B2CA}
+.scn[aria-pressed="true"] .scn-num{background:#fff;color:var(--ink);border-color:#fff}
+
+.brief dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:5px 10px;font-size:11.5px}
+.brief dt{font-family:var(--ff-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);padding-top:1px}
+.brief dd{margin:0;font-weight:600;color:var(--ink-2)}
+.brief p{margin:10px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+
+/* ============================ HERO STAGE ================================
+   The centre is one question answered in one word: did the attack get in?
+   Everything that is not that answer is either below the fold or behind a
+   disclosure. Motion is the explanation — the verdict and the track change
+   together when a control is toggled, so cause and effect are visible.
+   ===================================================================== */
+.hero{
+  background:var(--surface);border:1.5px solid var(--line);border-radius:30px;
+  box-shadow:var(--sh-1);padding:52px 40px 34px;text-align:center;
+}
+.hero-eyebrow{
+  font-family:var(--ff-mono);font-size:10.5px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-4);
+}
+.hero-verdict{margin-top:22px;overflow:hidden}
+.hero-word{
+  display:block;font-family:var(--ff-display);font-weight:900;
+  font-size:clamp(44px,8.4vw,102px);line-height:.9;letter-spacing:-.045em;
+  font-stretch:104%;text-transform:uppercase;color:var(--ink);
+}
+.hero-word.in{animation:wordIn .52s cubic-bezier(.16,.9,.28,1) both}
+@keyframes wordIn{from{transform:translateY(26px);opacity:0}}
+.hero[data-state="breached"] .hero-word{color:var(--breach)}
+.hero[data-state="contained"] .hero-word{color:var(--blocked)}
+.hero[data-state="response"] .hero-word{color:var(--alert)}
+.hero-line{
+  margin:16px auto 0;max-width:540px;font-size:15px;line-height:1.6;color:var(--ink-2);
+  animation:softIn .5s .08s cubic-bezier(.16,.9,.28,1) both;
+}
+@keyframes softIn{from{transform:translateY(9px);opacity:0}}
+
+/* ---------- progress track: one row, no labels ---------- */
+.track{display:flex;gap:5px;max-width:600px;margin:34px auto 0}
+.track-seg{
+  flex:1;height:14px;border-radius:5px;background:var(--paper-2);
+  transform:scaleY(.5);opacity:.75;
+  transition:background .4s ease, transform .4s cubic-bezier(.2,1.5,.4,1), opacity .4s ease;
+}
+.track-seg.reached{background:var(--breach);transform:scaleY(1);opacity:1}
+.track-seg.stop{background:var(--blocked);transform:scaleY(1.5);opacity:1}
+.track-seg.resp{background:var(--alert);transform:scaleY(1.5);opacity:1}
+.track-seg.now{box-shadow:0 0 0 4px rgba(212,32,17,.14)}
+.track-meta{
+  display:flex;justify-content:space-between;max-width:600px;margin:11px auto 0;
+  font-family:var(--ff-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4);
+}
+
+/* ---------- before / after ---------- */
+.compare-slot{min-height:0}
+.compare{
+  display:inline-grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;
+  margin-top:26px;padding:13px 22px;border-radius:16px;
+  background:var(--paper);border:1.5px solid var(--line);
+  animation:cmpIn .42s cubic-bezier(.16,.9,.28,1) both;
+}
+@keyframes cmpIn{from{transform:translateY(-8px);opacity:0}}
+.compare.out{animation:cmpOut .32s ease forwards}
+@keyframes cmpOut{to{transform:translateY(-6px);opacity:0}}
+.cmp-side b{font-family:var(--ff-mono);font-size:18px;font-weight:700;display:block;line-height:1}
+.cmp-side span{
+  display:block;margin-top:5px;font-family:var(--ff-mono);font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);
+}
+.cmp-side.was b{color:var(--ink-4)}
+.cmp-arrow{color:var(--ink-4)}
+
+/* ---------- narration during a run ---------- */
+.narrate{max-width:600px;margin:30px auto 0;min-height:118px}
+.narrate-tags{display:flex;gap:7px;justify-content:center;margin-bottom:10px}
+.narrate h3{font-size:clamp(19px,3vw,27px);letter-spacing:-.02em;line-height:1.15}
+.narrate p{margin:10px 0 0;font-size:14px;line-height:1.6;color:var(--ink-3)}
+.narrate .swap{animation:softIn .34s cubic-bezier(.16,.9,.28,1) both}
+
+/* ---------- actions ---------- */
+.hero-actions{display:flex;gap:12px;justify-content:center;align-items:center;margin-top:34px;flex-wrap:wrap}
+.btn-hero{
+  height:54px;padding:0 34px;border-radius:99px;border:0;
+  background:var(--ink);color:#fff;font-family:var(--ff-display);font-weight:800;
+  font-size:15.5px;letter-spacing:.01em;display:inline-flex;align-items:center;gap:10px;
+  box-shadow:0 4px 0 rgba(12,18,32,.26);
+  transition:transform .14s,box-shadow .14s,background .2s;
+}
+.btn-hero:hover{background:#1a2440;transform:translateY(-2px);box-shadow:0 6px 0 rgba(12,18,32,.24)}
+.btn-hero:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(12,18,32,.26)}
+.btn-hero[disabled]{opacity:.4;pointer-events:none}
+.btn-quiet{
+  height:40px;padding:0 16px;border-radius:99px;border:1.5px solid var(--line-2);
+  background:transparent;font-weight:600;font-size:13px;color:var(--ink-3);
+  transition:border-color .15s,color .15s;
+}
+.btn-quiet:hover{border-color:var(--ink);color:var(--ink)}
+.btn-quiet.sm{height:28px;padding:0 11px;font-size:11.5px;margin-left:auto}
+.btn-quiet[aria-pressed="true"],.btn-quiet[aria-expanded="true"]{border-color:var(--ink);color:var(--ink)}
+
+/* ============================ LEDGER ==================================== */
+.ledger{display:flex;flex-direction:column}
+.step{
+  display:grid;grid-template-columns:30px 1fr auto;gap:13px;
+  padding:14px 16px;border-bottom:1px solid var(--line);align-items:start;
+}
+.step:last-child{border-bottom:0}
+.step.is-quiet{opacity:.45}
+.step-idx{
+  font-family:var(--ff-mono);font-size:11px;font-weight:700;
+  height:24px;border-radius:7px;display:grid;place-items:center;
+  background:var(--paper-2);color:var(--ink-3);margin-top:1px;
+}
+.step.st-blocked .step-idx{background:var(--blocked);color:#fff}
+.step.st-passed .step-idx{background:var(--breach);color:#fff}
+.step.st-detected .step-idx{background:var(--alert);color:#fff}
+.step h4{font-size:14px;font-weight:700;font-family:var(--ff-body);letter-spacing:0;line-height:1.3}
+.step p{margin:4px 0 0;font-size:12.8px;line-height:1.55;color:var(--ink-3)}
+.step-tags{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px}
+.tag{
+  font-family:var(--ff-mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;padding:2.5px 6px;border-radius:5px;
+  background:var(--paper-2);color:var(--ink-3);border:1px solid var(--line);
+}
+.tag-mitre{background:#fff;color:var(--ink-2);border-color:var(--line-2)}
+.tag-layer{color:#fff;border:0}
+.step-math{
+  margin-top:9px;font-family:var(--ff-mono);font-size:11px;
+  background:var(--paper);border:1px solid var(--line);border-radius:9px;
+  padding:8px 10px;color:var(--ink-2);line-height:1.7;
+}
+.step-math b{color:var(--ink)}
+.step-math .ok{color:var(--blocked);font-weight:700}
+.step-math .no{color:var(--breach);font-weight:700}
+.step-math .warn{color:var(--alert);font-weight:700}
+.step-state{
+  font-family:var(--ff-mono);font-size:9.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:4px 8px;border-radius:6px;white-space:nowrap;margin-top:2px;
+}
+.step.st-blocked .step-state{background:var(--blocked-bg);color:#04503C}
+.step.st-passed .step-state{background:var(--breach-bg);color:#8E1509}
+.step.st-detected .step-state{background:var(--alert-bg);color:#7A4004}
+.step.st-idle .step-state{background:var(--paper-2);color:var(--ink-3)}
+.fix{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fix-lbl{font-size:10.5px;font-family:var(--ff-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line-2);
+  background:var(--surface);border-radius:99px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--ink-2);
+  transition:background .15s,color .15s,border-color .15s;
+}
+.chip:hover{border-color:var(--ink);background:var(--ink);color:#fff}
+.chip i{width:7px;height:7px;border-radius:99px;display:block;flex:0 0 auto}
+
+/* ============================ CONTROL MATRIX ============================ */
+.posture{padding:13px 14px;border-bottom:1.5px solid var(--line);background:linear-gradient(180deg,#fff,var(--paper))}
+.posture-top{display:flex;align-items:flex-end;gap:10px}
+.posture-score{font-family:var(--ff-mono);font-size:34px;font-weight:700;line-height:.9;letter-spacing:-.03em}
+.posture-max{font-family:var(--ff-mono);font-size:13px;color:var(--ink-4);font-weight:600;padding-bottom:3px}
+.posture-lbl{margin-left:auto;text-align:right}
+.posture-lbl b{display:block;font-size:12px;font-family:var(--ff-display);font-weight:800}
+.bar{height:9px;border-radius:99px;background:var(--paper-2);margin-top:10px;overflow:hidden;display:flex;border:1px solid var(--line)}
+.bar i{display:block;height:100%;transition:width .45s cubic-bezier(.2,.8,.2,1)}
+
+.lyr{border-bottom:1.5px solid var(--line)}
+.lyr:last-child{border-bottom:0}
+.lyr-hd{
+  display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;
+  padding:10px 13px;text-align:left;
+}
+.lyr-hd:hover{background:var(--paper)}
+.lyr-dot{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.lyr-name{font-family:var(--ff-display);font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;flex:1 1 auto}
+.lyr-tally{font-family:var(--ff-mono);font-size:11px;font-weight:700;color:var(--ink-3)}
+.lyr-chev{color:var(--ink-4);transition:transform .2s}
+.lyr[data-open="false"] .lyr-chev{transform:rotate(-90deg)}
+.lyr[data-open="false"] .lyr-bd{display:none}
+.lyr-bd{padding:0 13px 10px}
+
+.ctl{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.ctl:first-child{border-top:0}
+.ctl-name{font-weight:700;font-size:12.3px;line-height:1.25;color:var(--ink-2)}
+.ctl-sub{font-size:10.5px;color:var(--ink-4);margin-top:1px;line-height:1.3}
+.ctl.is-on .ctl-name{color:var(--ink)}
+.info-btn{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink-4);font-size:12px}
+.info-btn:hover{border-color:var(--ink);color:var(--ink)}
+
+/* ---------- toggle ---------- */
+.tgl{position:relative;width:42px;height:24px;flex:0 0 auto}
+.tgl input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:2}
+.tgl span{
+  position:absolute;inset:0;border-radius:99px;background:var(--paper-2);
+  border:1.5px solid var(--line-2);transition:background .16s,border-color .16s;
+}
+.tgl span::after{
+  content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:99px;
+  background:#fff;box-shadow:0 1px 3px rgba(12,18,32,.3);transition:transform .18s cubic-bezier(.3,1.4,.5,1);
+}
+.tgl input:checked + span::after{transform:translateX(18px)}
+.tgl input:focus-visible + span{outline:3px solid var(--l-perimeter);outline-offset:2px}
+.tgl.weak input:checked + span{background:var(--alert);border-color:var(--alert)}
+
+/* ---------- presets ---------- */
+.presets{display:flex;flex-direction:column;gap:6px}
+.preset{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 11px;
+  transition:border-color .12s,transform .12s;
+}
+.preset:hover{border-color:var(--ink);transform:translateX(2px)}
+.preset b{font-size:12.2px;font-weight:700;display:block}
+.preset span{font-size:10.5px;color:var(--ink-4);display:block;margin-top:1px;line-height:1.3}
+.preset .ic{color:var(--ink-4);margin-left:auto}
+
+/* ============================ MODAL ===================================== */
+.scrim{
+  position:fixed;inset:0;background:rgba(12,18,32,.44);backdrop-filter:blur(3px);
+  z-index:100;display:grid;place-items:center;padding:20px;
+  opacity:0;pointer-events:none;transition:opacity .18s;
+}
+.scrim[data-open="true"]{opacity:1;pointer-events:auto}
+.modal{
+  background:var(--surface);border:2px solid var(--ink);border-radius:var(--r-xl);
+  box-shadow:var(--sh-3);width:min(720px,100%);max-height:88vh;display:flex;flex-direction:column;
+  transform:translateY(10px) scale(.985);transition:transform .2s;
+}
+.scrim[data-open="true"] .modal{transform:none}
+.modal-hd{display:flex;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1.5px solid var(--line)}
+.modal-hd h3{font-size:19px;font-stretch:108%}
+.modal-bd{padding:18px 20px;overflow-y:auto}
+.modal-x{margin-left:auto;width:32px;height:32px;border-radius:9px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:0 0 auto}
+.modal-x:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+.kb-sec{margin-bottom:16px}
+.kb-sec:last-child{margin-bottom:0}
+.kb-sec > .eyebrow{display:block;margin-bottom:6px}
+.kb-sec p{margin:0;font-size:13px;line-height:1.6;color:var(--ink-2)}
+.vendors{display:flex;flex-wrap:wrap;gap:6px}
+.vendor{
+  font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:8px;
+  background:var(--paper);border:1.5px solid var(--line);color:var(--ink-2);
+}
+.caveat{
+  background:var(--alert-bg);border:1.5px solid #F0C98A;border-radius:10px;padding:11px 13px;
+  font-size:12.5px;line-height:1.55;color:#7A4004;
+}
+.src{
+  display:flex;align-items:baseline;gap:10px;text-decoration:none;
+  border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;
+  font-size:12.5px;color:var(--ink-2);line-height:1.45;transition:border-color .14s,background .14s;
+}
+.src:hover{border-color:var(--ink);background:var(--paper)}
+.src-url{margin-left:auto;font-family:var(--ff-mono);font-size:10.5px;color:var(--ink-4);white-space:nowrap}
+.caveat b{display:block;font-family:var(--ff-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+
+/* ---------- tooltip ---------- */
+.tip{
+  position:fixed;z-index:200;max-width:270px;background:var(--ink);color:#fff;
+  border-radius:10px;padding:9px 11px;font-size:11.8px;line-height:1.45;
+  box-shadow:var(--sh-2);pointer-events:none;opacity:0;transition:opacity .12s;
+}
+.tip[data-open="true"]{opacity:1}
+.tip b{display:block;font-family:var(--ff-mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#93A3C6;margin-bottom:3px}
+
+/* ---------- toast ---------- */
+.toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:210;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{
+  background:var(--ink);color:#fff;border-radius:12px;padding:11px 16px;font-size:12.5px;font-weight:600;
+  box-shadow:var(--sh-2);animation:pop .25s cubic-bezier(.2,1.3,.4,1);display:flex;align-items:center;gap:9px;
+}
+@keyframes pop{from{transform:translateY(14px);opacity:0}}
+
+/* ---------- footer ---------- */
+.foot{
+  max-width:1900px;margin:0 auto;padding:6px 18px 26px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  font-size:11px;color:var(--ink-3);font-family:var(--ff-mono);letter-spacing:.02em;
+}
+.foot .dot{width:6px;height:6px;border-radius:99px;background:var(--blocked)}
+
+/* ---------- history ---------- */
+.hist{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center;font-size:11.5px;padding:7px 9px;border:1px solid var(--line);border-radius:9px}
+.hist-row i{width:8px;height:8px;border-radius:99px;flex:0 0 auto}
+.hist-row b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-row span{font-family:var(--ff-mono);font-size:10.5px;color:var(--ink-3)}
+.empty{font-size:12px;color:var(--ink-4);text-align:center;padding:18px 8px;line-height:1.5}
+
+/* ============================ RESPONSIVE ================================ */
+@media (max-width:1400px){
+  .shell{grid-template-columns:262px minmax(0,1fr) 320px}
+  :root{--rail-l:262px;--rail-r:320px}
+}
+@media (max-width:1180px){
+  .shell{grid-template-columns:minmax(0,1fr);}
+  .rail{position:static;max-height:none;overflow:visible}
+  .rail-l{order:1}.stage-col{order:2}.rail-r{order:3}
+}
+@media (max-width:720px){
+  .hero{padding:34px 20px 26px;border-radius:24px}
+  .hero-verdict{margin-top:16px}
+  .track{gap:4px}
+  .narrate{margin-top:22px;min-height:132px}
+  .hero-actions{margin-top:26px;flex-direction:column}
+  .btn-hero,.btn-quiet{width:100%;justify-content:center}
+  .compare{grid-template-columns:1fr auto 1fr;gap:12px;padding:11px 14px}
+  .step{grid-template-columns:26px 1fr}
+  .step-state{grid-column:2;justify-self:start}
+  .masthead{height:auto;padding:10px 12px;flex-wrap:wrap;gap:10px}
+  .masthead-spacer{display:none}
+  .mh-sep{display:none}
+  .shell{padding:10px;gap:10px}
+  #viz{height:300px}
+  .verdict{grid-template-columns:auto 1fr;gap:11px}
+  .verdict-metrics{grid-column:1/-1;justify-content:space-between;text-align:left}
+  .step{grid-template-columns:30px 1fr}
+  .step-state{grid-column:2}
+  .brand-txt p{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+@media print{
+  .masthead,.rail,.transport,.stage-hd-actions{display:none}
+  .shell{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== ICON SPRITE (no emoji, per house style) ======== -->
+<svg class="svg-defs" aria-hidden="true"><defs>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"/></symbol>
+<symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/></symbol>
+<symbol id="i-skull" viewBox="0 0 24 24"><path d="M12 3c4.4 0 8 3.2 8 7.2 0 2.6-1.3 4.3-2.6 5.3v3H8.6v-3C7.3 14.5 6 12.8 6 10.2 6 6.2 7.6 3 12 3z"/><circle cx="9.5" cy="10.5" r="1.4"/><circle cx="14.5" cy="10.5" r="1.4"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+<symbol id="i-step" viewBox="0 0 24 24"><path d="M6 4l10 8-10 8z"/><path d="M19 4v16"/></symbol>
+<symbol id="i-reset" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8v.01"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4"/><path d="M8 20v-6h8v6"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></symbol>
+</defs></svg>
+
+<!-- ============================ MASTHEAD ================================ -->
+<header class="masthead">
+  <div class="brand">
+    <div class="brand-mark"><svg class="ic" style="width:19px;height:19px;stroke-width:2.1"><use href="#i-layers"/></svg></div>
+    <div class="brand-txt">
+      <h1>CyberDefense Architect</h1>
+      <p>Defence-in-depth simulator &middot; MITRE ATT&amp;CK</p>
+    </div>
+  </div>
+  <div class="masthead-spacer"></div>
+
+  <div class="mh-group">
+    <span class="eyebrow" style="margin-right:2px">Evaluation</span>
+    <div class="seg" role="group" aria-label="Evaluation mode">
+      <button id="mode-det" aria-pressed="true">Deterministic</button>
+      <button id="mode-prob" aria-pressed="false">Probabilistic</button>
+    </div>
+  </div>
+  <div class="mh-sep"></div>
+  <div class="mh-group">
+    <button class="btn" id="btn-kb"><svg class="ic"><use href="#i-book"/></svg>Knowledge base</button>
+    <button class="btn" id="btn-sources"><svg class="ic"><use href="#i-link"/></svg>Sources</button>
+    <button class="btn" id="btn-export"><svg class="ic"><use href="#i-download"/></svg>Export report</button>
+  </div>
+</header>
+
+<!-- ============================ SHELL =================================== -->
+<div class="shell">
+
+  <!-- ---------------- LEFT RAIL: scenarios + briefing ------------------- -->
+  <aside class="rail rail-l">
+    <section class="panel">
+      <div class="panel-hd">
+        <svg class="ic" style="color:var(--breach);width:16px;height:16px"><use href="#i-skull"/></svg>
+        <h2>Attack scenarios</h2>
+        <span class="count" id="scn-count">6</span>
+      </div>
+      <div class="panel-bd flush"><div class="scn-list" id="scn-list" role="group" aria-label="Attack scenarios"></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-hd">
+        <svg class="ic" style="width:16px;height:16px;color:var(--ink-3)"><use href="#i-info"/></svg>
+        <h2>Threat briefing</h2>
+      </div>
+      <div class="panel-bd brief" id="brief"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-hd">
+        <svg class="ic" style="width:16px;height:16px;color:var(--ink-3)"><use href="#i-reset"/></svg>
+        <h2>Run history</h2>
+        <span class="count" id="hist-count">0</span>
+      </div>
+      <div class="panel-bd">
+        <div class="hist" id="hist"></div>
+        <button class="btn btn-sm" id="btn-wipe" style="width:100%;justify-content:center;margin-top:9px">
+          <svg class="ic"><use href="#i-trash"/></svg>Clear local data
+        </button>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ---------------- CENTRE: one question, one answer ------------------ -->
+  <main class="stage-col">
+
+    <section class="hero" id="hero" data-state="breached">
+      <div class="hero-eyebrow" id="hero-eyebrow">Scenario</div>
+
+      <div class="hero-verdict"><span class="hero-word" id="hero-word">Ready</span></div>
+      <p class="hero-line" id="hero-line">Pick a scenario and turn controls on.</p>
+
+      <div class="track" id="track" role="img" aria-label="How far the attack got"></div>
+      <div class="track-meta"><span id="track-left">Entry</span><span id="track-right">Objective</span></div>
+
+      <div class="compare-slot" id="compare-slot"></div>
+
+      <div class="narrate" id="narrate" hidden aria-live="polite"></div>
+
+      <div class="hero-actions">
+        <button class="btn-hero" id="btn-run">
+          <svg class="ic" style="width:17px;height:17px"><use href="#i-play"/></svg>Run the attack
+        </button>
+        <button class="btn-quiet" id="btn-steps" aria-expanded="false">Show all steps</button>
+      </div>
+    </section>
+
+    <section class="panel" id="steps-panel" hidden>
+      <div class="panel-hd">
+        <h2>Attack chain</h2>
+        <button class="btn-quiet sm" id="btn-maths" aria-pressed="false">Show the maths</button>
+        <button class="info-btn" id="btn-model" type="button" aria-label="How this model works" style="margin-left:8px">
+          <svg class="ic" style="width:12px;height:12px"><use href="#i-info"/></svg></button>
+      </div>
+      <div class="panel-bd flush"><div class="ledger" id="ledger"></div></div>
+    </section>
+  </main>
+
+  <!-- ---------------- RIGHT RAIL: defensive matrix ---------------------- -->
+  <aside class="rail rail-r">
+    <section class="panel">
+      <div class="panel-hd">
+        <svg class="ic" style="width:16px;height:16px;color:var(--blocked)"><use href="#i-shield-check"/></svg>
+        <h2>Defensive layer matrix</h2>
+        <span class="count" id="ctl-count">0/26</span>
+      </div>
+
+      <div class="posture">
+        <div class="posture-top">
+          <span class="posture-score" id="posture-score">0</span>
+          <span class="posture-max">/ 100</span>
+          <span class="posture-lbl"><b id="posture-word">No controls</b><span class="eyebrow" id="posture-sub">Coverage index</span></span>
+        </div>
+        <div class="bar" id="posture-bar"></div>
+      </div>
+
+      <div class="panel-bd flush" id="matrix"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-hd">
+        <svg class="ic" style="width:16px;height:16px;color:var(--ink-3)"><use href="#i-save"/></svg>
+        <h2>Posture presets</h2>
+      </div>
+      <div class="panel-bd">
+        <div class="presets" id="presets"></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<footer class="foot">
+  <span class="dot"></span>
+  <span id="foot-storage">Stateless &mdash; nothing leaves this browser</span>
+  <span>&middot;</span><span>v1.3.0</span>
+  <span>&middot;</span><span>Illustrative model for training. Not a risk assessment.</span>
+  <span>&middot;</span><span>Technique and mitigation IDs from MITRE ATT&amp;CK&reg; v19.2, &copy; The MITRE Corporation.</span>
+</footer>
+
+<div class="scrim" id="scrim" data-open="false" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-hd">
+      <div style="flex:1;min-width:0">
+        <div class="eyebrow" id="modal-eyebrow">Reference knowledge base</div>
+        <h3 id="modal-title">Knowledge base</h3>
+      </div>
+      <button class="modal-x" id="modal-x" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="modal-bd" id="modal-bd"></div>
+  </div>
+</div>
+
+<div class="tip" id="tip" data-open="false" role="tooltip"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+/* ============================================================================
+ * CyberDefense Architect v1.0.0
+ * Stateless SPA. No network calls. No server. All state in memory; optional
+ * run history + saved postures in IndexedDB, wipeable from the UI.
+ *
+ * Module map (mirrors the PRD):
+ *   DATA    — layers, controls, scenarios (Threat Vector Engine content)
+ *   ENGINE  — chain evaluation (Impact Analysis)
+ *   VIZ     — canvas kill-chain corridor
+ *   STORE   — IndexedDB wrapper (session-local only)
+ *   UI      — render + wiring (Defensive Layer Matrix, Knowledge Base)
+ * ==========================================================================*/
+"use strict";
+
+/* ============================== DATA ==================================== */
+
+const LAYERS = [
+  { id:"perimeter", name:"Perimeter",  css:"--l-perimeter", hex:"#1D4ED8", blurb:"Everything between the internet and you: NGFW, IPS, WAF, mail and DNS filtering, ZTNA." },
+  { id:"identity",  name:"Identity",   css:"--l-identity",  hex:"#5B34D6", blurb:"Who is allowed to be who. MFA, privileged access, identity threat detection, local-admin hygiene." },
+  { id:"network",   name:"Network",    css:"--l-network",   hex:"#8B2FC9", blurb:"East-west movement control: micro-segmentation, NDR, egress control, NAC." },
+  { id:"compute",   name:"Compute",    css:"--l-compute",   hex:"#B32A9D", blurb:"The endpoint and the workload: EDR, patching, application control, hardening, virtual patching." },
+  { id:"data",      name:"Data",       css:"--l-data",      hex:"#C9257A", blurb:"The thing the attacker actually came for: DLP, DAM, encryption, immutable backup, API abuse defence." }
+];
+const LAYER_BY_ID = Object.fromEntries(LAYERS.map(l => [l.id, l]));
+
+/* Each control carries its own teaching payload for the Knowledge Base.
+   `weight` feeds the coverage index only — it is a rough breadth weighting,
+   not a claim about relative product quality. */
+const CONTROLS = [
+  /* ---------------------------- PERIMETER ------------------------------ */
+  { id:"ngfw", layer:"perimeter", name:"Next-generation firewall", sub:"L7 policy, app-ID, TLS decrypt", weight:4,
+    what:"Stateful firewalling with application awareness at the north-south boundary. Decides which flows are even permitted to reach an exposed service.",
+    stops:"Blunt exposure. It removes whole classes of reachability, but it does not understand the content of a permitted session unless decryption and threat prevention are on.",
+    mitigation:"M1037 Filter Network Traffic", 
+    vendors:["Palo Alto PA-Series","Fortinet FortiGate","Check Point Quantum","Cisco Secure Firewall"],
+    caveat:"An NGFW with every rule set to any/any and no decryption is a very expensive router. Efficacy in this model assumes tuned policy." },
+  { id:"ips", layer:"perimeter", name:"Network IPS / threat prevention", sub:"Signature + behavioural inline blocking", weight:4,
+    what:"Inspects permitted traffic for known exploit patterns and blocks the session inline, at the network edge or on the east-west path.",
+    stops:"Exploitation of known CVEs in transit, including against hosts you have not yet patched.",
+    mitigation:"M1031 Network Intrusion Prevention",
+    vendors:["Palo Alto Threat Prevention","Trend Micro TippingPoint","VMware vDefend IDS/IPS","Snort/Suricata"],
+    caveat:"Signature coverage lags novel exploits by hours to weeks. Treat IPS as compensating control, never as a patching substitute." },
+  { id:"waf", layer:"perimeter", name:"WAF & API protection", sub:"OWASP Top 10, schema enforcement", weight:4,
+    what:"Application-layer proxy that validates requests against an app or API schema and blocks injection, traversal and object-reference abuse.",
+    stops:"Exploitation of public-facing applications, broken object-level authorisation, enumeration of API endpoints.",
+    mitigation:"M1050 Exploit Protection / M1051 Update Software",
+    vendors:["Cloudflare WAF","Akamai App & API Protector","F5 Distributed Cloud","AWS WAF","Salt Security"],
+    caveat:"A WAF in log-only mode blocks nothing. Most WAF failures in the field are deployment mode, not detection capability." },
+  { id:"email", layer:"perimeter", name:"Secure email gateway", sub:"Attachment detonation, link rewrite", weight:5,
+    what:"Inspects inbound mail: detonates attachments in a sandbox, rewrites and re-checks links at click time, scores sender reputation and impersonation signals.",
+    stops:"The single most common initial access vector. Phishing attachments and credential-harvest links.",
+    mitigation:"M1049 Antivirus/Antimalware, M1054 Software Configuration",
+    vendors:["Proofpoint","Abnormal AI","Mimecast","Microsoft Defender for Office 365"],
+    caveat:"Detonation is beatable by delayed-execution payloads and by links that are benign at delivery time and weaponised after. Click-time re-check matters more than delivery-time scanning." },
+  { id:"pdns", layer:"perimeter", name:"Protective DNS", sub:"Resolver filtering, DGA and tunnel detection", weight:4,
+    what:"Every name lookup is resolved through a policy engine that blocks known-bad, newly-registered and algorithmically-generated domains, and flags anomalous query volume or entropy.",
+    stops:"Command-and-control callback, DNS tunnelling, and a large share of phishing payload retrieval.",
+    mitigation:"M1021 Restrict Web-Based Content",
+    vendors:["Cisco Umbrella","Infoblox Threat Defense","Palo Alto DNS Security","Quad9"],
+    caveat:"Only effective if endpoints cannot bypass it. DoH to a public resolver walks straight around protective DNS unless you block it explicitly." },
+  { id:"ztna", layer:"perimeter", name:"Zero-trust network access", sub:"Per-app brokered access, no flat VPN", weight:5,
+    what:"Replaces network-level VPN with per-application brokered sessions. A user authenticates to an application, never to a subnet.",
+    stops:"The 'VPN in, then everything is reachable' failure mode. Removes exposed RDP, SMB and management planes from the internet entirely.",
+    mitigation:"M1035 Limit Access to Resource Over Network",
+    vendors:["Zscaler Private Access","Cloudflare Access","Netskope Private Access","Palo Alto Prisma Access"],
+    caveat:"Value collapses if legacy flat VPN stays up in parallel for 'the apps we haven't migrated yet'. That parallel path is the one the attacker uses." },
+
+  /* ---------------------------- IDENTITY ------------------------------- */
+  { id:"mfa", layer:"identity", name:"Phishing-resistant MFA", sub:"FIDO2 / passkeys, not SMS or push", weight:6,
+    what:"Cryptographic origin-bound authentication. The authenticator refuses to sign for a domain that is not the real one, so a proxy phishing page gets nothing usable.",
+    stops:"Credential harvesting, adversary-in-the-middle phishing, password spraying, credential stuffing.",
+    mitigation:"M1032 Multi-factor Authentication",
+    vendors:["Okta FastPass","Microsoft Entra ID + passkeys","Duo","YubiKey / FIDO2 tokens"],
+    caveat:"SMS and push-approval MFA are materially weaker: both fall to real-time proxy phishing and MFA fatigue. This model scores phishing-resistant MFA. If yours is push-based, mentally halve the effect." },
+  { id:"pam", layer:"identity", name:"Privileged access management", sub:"Vaulted credentials, session brokering", weight:5,
+    what:"Administrative credentials live in a vault, are checked out just-in-time, rotate after use, and admin sessions are brokered and recorded.",
+    stops:"Standing privilege. An attacker who lands on a workstation finds no reusable domain admin credential in memory.",
+    mitigation:"M1026 Privileged Account Management",
+    vendors:["CyberArk","Delinea","BeyondTrust","HashiCorp Vault"],
+    caveat:"Break-glass accounts and service accounts are routinely excluded from PAM during rollout and then never brought in. Those exclusions are the actual attack surface." },
+  { id:"itdr", layer:"identity", name:"Identity threat detection & response", sub:"Directory attack telemetry", weight:4,
+    what:"Monitors the directory itself: anomalous ticket requests, DCSync, enumeration patterns, impossible travel, new admin group membership.",
+    stops:"Nothing outright, but it is usually the earliest reliable signal that credentials are being abused rather than used.",
+    mitigation:"M1047 Audit",
+    vendors:["Microsoft Defender for Identity","Silverfort","Semperis","CrowdStrike Identity Protection"],
+    caveat:"Detection-only by design. Its value is entirely dependent on someone acting on the alert inside the dwell window." },
+  { id:"laps", layer:"identity", name:"Local admin randomisation & tiering", sub:"LAPS, tier-0 separation", weight:4,
+    what:"Every machine gets a unique, rotating local administrator password, and admin accounts are tiered so a workstation admin cannot authenticate to a server or domain controller.",
+    stops:"Pass-the-hash and credential reuse across the estate. Breaks the single most reliable lateral movement technique in a Windows environment.",
+    mitigation:"M1026 Privileged Account Management, M1027 Password Policies",
+    vendors:["Windows LAPS","Delinea","CyberArk Endpoint Privilege Manager"],
+    caveat:"Cheap, high-impact, and still missing in a majority of mid-market estates. Usually blocked by legacy imaging and helpdesk process rather than by cost." },
+
+  /* ---------------------------- NETWORK -------------------------------- */
+  { id:"microseg", layer:"network", name:"Micro-segmentation", sub:"Distributed east-west firewalling", weight:6,
+    what:"Firewall policy enforced at every workload's virtual NIC, so workload-to-workload traffic is allowed only where explicitly permitted, regardless of subnet.",
+    stops:"Lateral movement. The attacker gets one host and finds that host cannot talk to anything interesting.",
+    mitigation:"M1030 Network Segmentation",
+    vendors:["VMware vDefend Distributed Firewall (NSX)","Illumio","Akamai Guardicore","Cisco Secure Workload"],
+    caveat:"The technology is rarely the blocker; the application dependency map is. Estates that deploy in monitor mode and never move to enforce get zero protective value." },
+  { id:"ndr", layer:"network", name:"Network detection & response", sub:"Flow analytics, beacon detection", weight:4,
+    what:"Baselines normal east-west and north-south flow behaviour and flags beaconing, scanning, unusual protocol use and volumetric anomalies.",
+    stops:"Nothing directly. It shortens dwell time, which is the difference between an incident and a disaster.",
+    mitigation:"M1047 Audit",
+    vendors:["Darktrace","ExtraHop Reveal(x)","Vectra AI","Corelight"],
+    caveat:"High alert volume in the first 90 days. Without tuning and an owner, NDR becomes an expensive source of ignored alerts." },
+  { id:"egress", layer:"network", name:"Egress filtering & TLS inspection", sub:"Default-deny outbound", weight:5,
+    what:"Outbound traffic is denied by default and permitted by policy, with inspection of encrypted sessions to categorised destinations.",
+    stops:"Command-and-control channels and bulk exfiltration over 'ordinary' HTTPS.",
+    mitigation:"M1037 Filter Network Traffic",
+    vendors:["Zscaler Internet Access","Netskope","Palo Alto URL Filtering","Cloudflare Gateway"],
+    caveat:"Default-deny outbound is culturally hard. Most organisations that claim egress filtering are running default-allow with a blocklist, which stops known-bad only." },
+  { id:"nac", layer:"network", name:"Network access control", sub:"802.1X, posture check on connect", weight:3,
+    what:"Devices must authenticate and meet a posture standard before receiving a usable network address; unknown or non-compliant devices land in quarantine.",
+    stops:"Rogue and unmanaged devices, and contractor laptops arriving with whatever they were carrying.",
+    mitigation:"M1035 Limit Access to Resource Over Network",
+    vendors:["Cisco ISE","HPE Aruba Networking ClearPass","Forescout","Fortinet FortiNAC"],
+    caveat:"Printers, OT and medical devices force MAC-bypass exceptions. Those exception lists tend to grow until they are the network." },
+
+  /* ---------------------------- COMPUTE -------------------------------- */
+  { id:"edr", layer:"compute", name:"EDR / XDR", sub:"Behavioural detection, response, tamper protection", weight:7,
+    what:"Kernel-level telemetry on process, memory and file behaviour with automated blocking and host isolation, plus retained telemetry for hunting.",
+    stops:"Payload execution, credential dumping, defence evasion, ransomware encryption behaviour, and hands-on-keyboard activity.",
+    mitigation:"M1040 Behavior Prevention on Endpoint",
+    vendors:["CrowdStrike Falcon","SentinelOne","Microsoft Defender for Endpoint","Broadcom Carbon Black"],
+    caveat:"Coverage gaps are the story, not efficacy. Servers, hypervisors, legacy OS and contractor devices are where EDR is missing, and that is exactly where attackers operate." },
+  { id:"av", layer:"compute", name:"Signature antivirus (legacy)", sub:"Hash and signature matching only", weight:1, weak:true,
+    what:"Matches files against known-bad hashes and signatures. Included deliberately so the model shows what it does and does not do.",
+    stops:"Commodity, previously-seen malware. It is a hygiene floor, not a control you can plan a defence around.",
+    mitigation:"M1049 Antivirus/Antimalware",
+    vendors:["Legacy AV suites","Built-in OS antimalware"],
+    caveat:"Any packed, obfuscated or freshly-compiled payload defeats signature matching. If the estate's endpoint answer is 'we have AV', that is the finding." },
+  { id:"patch", layer:"compute", name:"Patch & vulnerability management", sub:"Discovery, prioritisation, deployment SLA", weight:6,
+    what:"Continuous discovery of exposure with a measured deployment SLA, prioritised by exploitability rather than by CVSS alone.",
+    stops:"Exploitation of known vulnerabilities, which remains one of the top initial-access vectors year after year.",
+    mitigation:"M1051 Update Software",
+    vendors:["Tanium","Qualys VMDR","Ivanti Neurons","Automox","Rapid7"],
+    caveat:"The constraint is change windows, not tooling. If your internet-facing patch SLA is 30 days, assume the exploit window is the first 72 hours." },
+  { id:"vpatch", layer:"compute", name:"Virtual patching", sub:"Host IPS / workload shielding", weight:5,
+    what:"Applies an inline rule that blocks exploitation of a specific vulnerability without touching the vulnerable software, buying time until the real patch lands.",
+    stops:"Exploitation of unpatched systems during the change-window gap, and of systems that genuinely cannot be patched.",
+    mitigation:"M1050 Exploit Protection",
+    vendors:["Trend Micro Deep Security","VMware vDefend","Palo Alto Threat Prevention"],
+    caveat:"Explicitly a bridge, not a destination. Estates that adopt virtual patching and then stop patching have converted an acute risk into a chronic one." },
+  { id:"appctrl", layer:"compute", name:"Application control", sub:"Allowlisting, block untrusted binaries", weight:5,
+    what:"Only approved binaries and scripts execute. Everything else is denied by default, including anything the user was tricked into running.",
+    stops:"User execution of malicious files, script-based loaders, and living-off-the-land binaries where policy is tight.",
+    mitigation:"M1038 Execution Prevention",
+    vendors:["Carbon Black App Control","ThreatLocker","Microsoft AppLocker / WDAC","Airlock Digital"],
+    caveat:"Very effective, operationally expensive. Realistic on servers and fixed-function endpoints; painful on developer workstations." },
+  { id:"harden", layer:"compute", name:"Hardening & secure baseline", sub:"CIS benchmarks, credential guard, macros off", weight:4,
+    what:"Systems are built to a measured baseline: unnecessary services off, credential protection on, macros restricted, script hosts constrained, admin shares controlled.",
+    stops:"A wide, unglamorous spread of privilege escalation and evasion techniques that assume default configuration.",
+    mitigation:"M1054 Software Configuration, M1028 Operating System Configuration",
+    vendors:["CIS Benchmarks / CIS-CAT","Ansible & DSC baselines","VCF hardening guides","Microsoft Security Baselines"],
+    caveat:"Drift is the enemy. A baseline applied at build time and never re-measured is a documentation exercise." },
+
+  /* ---------------------------- DATA ----------------------------------- */
+  { id:"dlp", layer:"data", name:"Data loss prevention", sub:"Content inspection on egress paths", weight:4,
+    what:"Inspects data in motion and at rest against classification policy and blocks or quarantines movement of sensitive content off approved paths.",
+    stops:"Bulk exfiltration of recognisable structured data: card numbers, national IDs, customer records.",
+    mitigation:"M1057 Data Loss Prevention",
+    vendors:["Broadcom/Symantec DLP","Forcepoint","Microsoft Purview DLP","Netskope"],
+    caveat:"Only as good as classification. Unstructured intellectual property, source code and design files routinely walk past DLP that was tuned for card data." },
+  { id:"dam", layer:"data", name:"Database activity monitoring", sub:"Query-level audit and anomaly blocking", weight:4,
+    what:"Watches queries against production data stores and flags or blocks abnormal access: unusual volume, unusual hour, unusual principal, mass sequential reads.",
+    stops:"Slow, credentialed data theft that looks like legitimate application access at the network layer.",
+    mitigation:"M1047 Audit",
+    vendors:["Imperva","IBM Guardium","Varonis","Oracle Audit Vault"],
+    caveat:"Application service accounts do everything, so per-user attribution requires application-side context that is often not plumbed through." },
+  { id:"crypto", layer:"data", name:"Encryption at rest & key management", sub:"KMS, HSM-backed keys", weight:3,
+    what:"Data at rest is encrypted with keys held in a managed key store, separated from the data and the workload identity that reads it.",
+    stops:"Value of stolen storage, snapshots and backups. It does not stop an attacker operating with valid application credentials.",
+    mitigation:"M1041 Encrypt Sensitive Information",
+    vendors:["Thales CipherTrust","HashiCorp Vault","AWS KMS / Azure Key Vault","Broadcom/Symantec"],
+    caveat:"Frequently oversold in board reporting. Transparent encryption protects against physical and snapshot theft, not against a compromised application identity." },
+  { id:"backup", layer:"data", name:"Immutable & isolated backup", sub:"Hardened repo, air gap, tested restore", weight:6,
+    what:"Backups that cannot be modified or deleted within their retention window, stored on separately-credentialed infrastructure, with restore times that have actually been measured.",
+    stops:"The leverage in ransomware. It does not stop encryption; it stops encryption from being an existential event.",
+    mitigation:"M1053 Data Backup",
+    vendors:["Veeam hardened repository","Rubrik","Cohesity","Dell PowerProtect","Zerto"],
+    caveat:"Backups that share the production directory get encrypted with production. Untested restores are not backups. Both failures are extremely common." },
+  { id:"drm", layer:"data", name:"Classification & rights management", sub:"Labels that travel with the file", weight:3,
+    what:"Sensitivity labels bound to the document itself, with encryption and access policy that persists after the file leaves the estate.",
+    stops:"Usefulness of copied files. A stolen document that will not open outside the tenancy has limited resale value.",
+    mitigation:"M1041 Encrypt Sensitive Information",
+    vendors:["Microsoft Purview Information Protection","Seclore","Titus/Fortra"],
+    caveat:"Depends on labelling discipline at creation time. Auto-labelling helps; user-driven labelling alone reliably decays." },
+  { id:"rate", layer:"data", name:"API rate limiting & bot defence", sub:"Quota, behavioural bot scoring", weight:4,
+    what:"Per-identity and per-endpoint request quotas, sequential-enumeration detection, and bot fingerprinting on the API front door.",
+    stops:"Credential stuffing and scraping at scale. Turns a two-hour full-database enumeration into a two-year one.",
+    mitigation:"M1036 Account Use Policies",
+    vendors:["Cloudflare Bot Management","Akamai Bot Manager","Salt Security","Kong / Apigee policies"],
+    caveat:"Attackers distribute across residential proxies and stay under per-IP thresholds. Rate limits must be per-identity and per-object-pattern, not per-IP." }
+];
+const CTL_BY_ID = Object.fromEntries(CONTROLS.map(c => [c.id, c]));
+const MAX_WEIGHT = CONTROLS.reduce((s,c) => s + c.weight, 0);
+
+/* ---------------------------------------------------------------------------
+ * SCENARIOS — the Threat Vector Engine content.
+ * Each step lists the controls that can BLOCK it and the controls that can
+ * DETECT it, with an efficacy weight in 0..1. Weights are informed judgements
+ * for teaching, not measured data. They are shown on screen so a trainee can
+ * argue with them, which is the point.
+ * ------------------------------------------------------------------------*/
+const SCENARIOS = [
+  {
+    id:"cred", name:"Credential harvest & lateral movement",
+    sub:"Phished session token to domain-wide access",
+    actor:"Financially-motivated intrusion set", target:"Corporate directory and file estate",
+    baseCost:38, records:"120,000 employee and client records",
+    brief:"An operator phishes a valid session, discovers the directory, reuses a shared local administrator password, and moves laterally to the file estate. No malware is required at any point, which is why this chain defeats endpoint-only strategies.",
+    steps:[
+      { stage:"Reconnaissance", taId:"TA0043", tech:"Gather Victim Identity Information: Employee Names", tid:"T1589.003",
+        note:"Employee names, formats and role titles are harvested from public sources to build a target list. No system is touched.",
+        block:[], detect:[["ndr",0.05]],
+        teach:"Nothing on this list blocks reconnaissance, and no product will. This step exists to make that explicit: the defensive chain starts at delivery, not before it." },
+      { stage:"Initial access", taId:"TA0001", tech:"Phishing: Spearphishing Link", tid:"T1566.002",
+        note:"A mail lands with a link to a convincing single-sign-on page hosted on a domain registered four hours earlier.",
+        block:[["email",0.72],["pdns",0.34]], detect:[["email",0.6]] },
+      { stage:"Credential access", taId:"TA0006", tech:"Adversary-in-the-Middle / Steal Web Session Cookie", tid:"T1557,T1539",
+        note:"The proxy page relays the real login in real time and captures both the password and the post-authentication session cookie.",
+        block:[["mfa",0.9],["itdr",0.25]], detect:[["itdr",0.55]],
+        teach:"Push-approval and SMS MFA do not block this step; the user approves a prompt for a login they believe they initiated. Only origin-bound authentication refuses to sign." },
+      { stage:"Initial access", taId:"TA0001", tech:"Valid Accounts", tid:"T1078",
+        note:"The stolen session is replayed against the VPN concentrator from a hosting provider address, and lands on the flat internal network.",
+        block:[["ztna",0.62],["mfa",0.75],["nac",0.2]], detect:[["itdr",0.7],["ndr",0.3]] },
+      { stage:"Discovery", taId:"TA0007", tech:"Account & Domain Trust Discovery", tid:"T1087,T1482",
+        note:"A graphing tool enumerates the directory and computes the shortest path from this user to domain administrator.",
+        block:[], detect:[["itdr",0.55],["edr",0.5],["ndr",0.3]],
+        teach:"Directory enumeration uses ordinary, authenticated LDAP. There is no clean way to block it without breaking the directory, which is why this step is detection-only." },
+      { stage:"Privilege escalation", taId:"TA0004", tech:"Use Alternate Authentication Material: Pass-the-Hash", tid:"T1550.002",
+        note:"The workstation's local administrator hash is reused against 340 other machines that were imaged from the same gold build.",
+        block:[["laps",0.85],["pam",0.55],["harden",0.35]], detect:[["edr",0.6],["itdr",0.6]] },
+      { stage:"Lateral movement", taId:"TA0008", tech:"Remote Services: RDP and SMB", tid:"T1021.001,T1021.002",
+        note:"Administrative shares on the file cluster are mounted from the compromised workstation.",
+        block:[["microseg",0.85],["nac",0.25]], detect:[["ndr",0.62],["microseg",0.4]],
+        teach:"This is the step where micro-segmentation earns its licence cost. A workstation has no business opening SMB to a file cluster's admin share." },
+      { stage:"Collection", taId:"TA0009", tech:"Data from Network Shared Drive", tid:"T1039",
+        note:"680 GB of HR and contract data is staged into an archive on the compromised host.",
+        block:[["drm",0.4],["dam",0.3]], detect:[["dam",0.65],["dlp",0.5],["edr",0.4]] },
+      { stage:"Exfiltration", taId:"TA0010", tech:"Exfiltration Over C2 Channel", tid:"T1041",
+        note:"The archive is uploaded in chunks to a cloud storage provider over TLS during business hours.",
+        block:[["egress",0.6],["dlp",0.65]], detect:[["dlp",0.7],["ndr",0.5]] }
+    ]
+  },
+
+  {
+    id:"ransom", name:"Ransomware on unprotected storage",
+    sub:"Exposed RDP to estate-wide encryption",
+    actor:"Ransomware-as-a-service affiliate", target:"Virtualised file and application estate",
+    baseCost:64, records:"Full production estate availability",
+    brief:"An affiliate buys access to an exposed remote desktop service, disables endpoint protection, deletes shadow copies and backups, then encrypts at the storage layer. The decisive control is not detection — it is whether the backups were reachable from the production credential.",
+    steps:[
+      { stage:"Initial access", taId:"TA0001", tech:"External Remote Services", tid:"T1133",
+        note:"A remote desktop gateway is directly published to the internet with password-only authentication.",
+        block:[["ztna",0.88],["mfa",0.7],["ngfw",0.45]], detect:[["ndr",0.3],["itdr",0.4]] },
+      { stage:"Execution", taId:"TA0002", tech:"Command and Scripting Interpreter: PowerShell", tid:"T1059.001",
+        note:"An encoded PowerShell loader pulls the second stage into memory.",
+        block:[["appctrl",0.72],["edr",0.6],["harden",0.3]], detect:[["edr",0.75]] },
+      { stage:"Defence evasion", taId:"TA0005", tech:"Impair Defenses: Disable or Modify Tools", tid:"T1562.001",
+        note:"The operator attempts to stop security services and uninstall the endpoint agent using a signed vulnerable driver.",
+        block:[["edr",0.62],["harden",0.35],["appctrl",0.45]], detect:[["edr",0.7]],
+        teach:"Tamper protection is a configuration choice, not a default in every deployment. An EDR that can be uninstalled by a local administrator is a logging tool." },
+      { stage:"Discovery", taId:"TA0007", tech:"Network Share Discovery", tid:"T1135",
+        note:"Every reachable share, hypervisor management interface and backup console is enumerated.",
+        block:[["microseg",0.5]], detect:[["ndr",0.45],["dam",0.3]] },
+      { stage:"Lateral movement", taId:"TA0008", tech:"Remote Services: SMB / Windows Admin Shares", tid:"T1021.002",
+        note:"The payload is copied to servers and to the hypervisor management network using harvested credentials.",
+        block:[["microseg",0.82],["laps",0.55],["pam",0.5]], detect:[["ndr",0.6]] },
+      { stage:"Impact", taId:"TA0040", tech:"Inhibit System Recovery", tid:"T1490",
+        note:"Volume shadow copies are deleted and the backup catalogue is targeted with the same domain credential used everywhere else.",
+        block:[["backup",0.9],["pam",0.4]], detect:[["edr",0.6],["dam",0.4]],
+        teach:"This is the pivotal step of the entire scenario. If the backup platform authenticates against the same directory as production, it is not a separate control." },
+      { stage:"Exfiltration", taId:"TA0010", tech:"Exfiltration to Cloud Storage", tid:"T1567.002",
+        note:"Data is copied out before encryption to enable double extortion.",
+        block:[["egress",0.55],["dlp",0.6]], detect:[["dlp",0.65],["ndr",0.55]] },
+      { stage:"Impact", taId:"TA0040", tech:"Data Encrypted for Impact", tid:"T1486",
+        note:"Encryption is executed across file servers and virtual machine datastores over a weekend.",
+        block:[["edr",0.65],["appctrl",0.5],["microseg",0.3]], detect:[["edr",0.8],["ndr",0.5]] }
+    ]
+  },
+
+  {
+    id:"api", name:"API data scraping",
+    sub:"OWASP API Top 10 — enumeration at scale",
+    actor:"Data broker / competitor-funded scraper", target:"Customer-facing mobile API",
+    baseCost:29, records:"4.1 million customer profiles",
+    brief:"No malware, no endpoint, no phishing. A mobile API is reverse-engineered, an object-reference flaw is found, and the customer database is enumerated one legitimate-looking request at a time. Endpoint and network controls are almost entirely irrelevant here — which is exactly the lesson.",
+    steps:[
+      { stage:"Reconnaissance", taId:"TA0043", tech:"Active Scanning: Wordlist Scanning", tid:"T1595.003",
+        note:"The mobile client is decompiled and undocumented API endpoints, including a legacy v1 path, are enumerated.",
+        block:[["waf",0.35]], detect:[["waf",0.5],["rate",0.4]],
+        teach:"Shadow and zombie API versions are the most common finding in API assessments. The v1 endpoint nobody decommissioned rarely has the v3 authorisation logic." },
+      { stage:"Initial access", taId:"TA0001", tech:"Exploit Public-Facing Application", tid:"T1190",
+        note:"Broken object-level authorisation: changing a customer identifier in the request returns another customer's record.",
+        block:[["waf",0.55]], detect:[["waf",0.5],["dam",0.45]] },
+      { stage:"Credential access", taId:"TA0006", tech:"Brute Force: Credential Stuffing", tid:"T1110.004",
+        note:"Credentials from an unrelated breach are replayed against the login endpoint from a residential proxy pool.",
+        block:[["rate",0.75],["mfa",0.7],["waf",0.4]], detect:[["rate",0.6],["itdr",0.4]] },
+      { stage:"Credential access", taId:"TA0006", tech:"Forge Web Credentials: Web Cookies", tid:"T1606.001",
+        note:"Session tokens are re-issued with an altered role claim because the server trusts the algorithm header and validates the signature weakly.",
+        block:[["waf",0.5],["harden",0.4]], detect:[["dam",0.4]] },
+      { stage:"Collection", taId:"TA0009", tech:"Data from Information Repositories", tid:"T1213",
+        note:"Sequential identifier enumeration pulls 4.1 million profiles over eleven days, staying under every per-IP threshold.",
+        block:[["rate",0.8],["dam",0.45]], detect:[["dam",0.7],["rate",0.65]],
+        teach:"Per-IP rate limiting does not see this. The signal is one identity reading millions of distinct objects, which only per-identity and per-object-pattern limits catch." },
+      { stage:"Exfiltration", taId:"TA0010", tech:"Automated Exfiltration", tid:"T1020",
+        note:"Results are streamed out over ordinary HTTPS to a commodity cloud host.",
+        block:[["dlp",0.35]], detect:[["dam",0.6],["ndr",0.35],["dlp",0.4]] },
+      { stage:"Impact", taId:"TA0040", tech:"Financial / Regulatory Loss", tid:"—",
+        note:"The dataset is resold. Regulatory exposure follows under India's DPDP Act, whose substantive obligations commence 14 May 2027, and equivalent regimes elsewhere.",
+        block:[["drm",0.25],["crypto",0.15]], detect:[] }
+    ]
+  },
+
+  {
+    id:"phish", name:"Phishing & payload execution on non-EDR endpoints",
+    sub:"The coverage gap, not the product gap",
+    actor:"Commodity access broker", target:"Finance department workstations",
+    baseCost:31, records:"Payment systems and treasury access",
+    brief:"The estate has an excellent EDR platform. It is on 71% of endpoints. This scenario runs through the other 29%, which is how most real intrusions begin — not because the product failed, but because it was not installed there.",
+    steps:[
+      { stage:"Initial access", taId:"TA0001", tech:"Phishing: Spearphishing Attachment", tid:"T1566.001",
+        note:"An invoice-themed document arrives from a compromised supplier mailbox, so sender reputation is clean.",
+        block:[["email",0.68]], detect:[["email",0.6]] },
+      { stage:"Execution", taId:"TA0002", tech:"User Execution: Malicious File", tid:"T1204.002",
+        note:"The user enables content and a macro launches a script loader.",
+        block:[["appctrl",0.75],["harden",0.55],["edr",0.5],["av",0.2]], detect:[["edr",0.65]],
+        teach:"Disabling macros from the internet is a free configuration change that removes this step entirely. It is still not set in a large share of estates." },
+      { stage:"Defence evasion", taId:"TA0005", tech:"Obfuscated Files or Information", tid:"T1027",
+        note:"The payload is packed and freshly compiled, so it has no known signature anywhere.",
+        block:[["edr",0.55],["av",0.05]], detect:[["edr",0.6]],
+        teach:"Signature antivirus is scored at 0.05 here on purpose. Against a novel packed binary, hash matching contributes approximately nothing." },
+      { stage:"Persistence", taId:"TA0003", tech:"Scheduled Task / Registry Run Keys", tid:"T1053.005,T1547.001",
+        note:"A scheduled task re-launches the implant at logon.",
+        block:[["edr",0.5],["harden",0.3],["appctrl",0.4]], detect:[["edr",0.72]] },
+      { stage:"Command and control", taId:"TA0011", tech:"Application Layer Protocol: Web Protocols", tid:"T1071.001",
+        note:"The implant beacons every 47 seconds with jitter to a cloud CDN front.",
+        block:[["egress",0.5],["pdns",0.5],["ngfw",0.3]], detect:[["ndr",0.65],["pdns",0.5]] },
+      { stage:"Privilege escalation", taId:"TA0004", tech:"Abuse Elevation Control Mechanism: Bypass UAC", tid:"T1548.002",
+        note:"The user is a local administrator, so elevation is a prompt away.",
+        block:[["harden",0.5],["pam",0.6],["edr",0.45]], detect:[["edr",0.55]] },
+      { stage:"Credential access", taId:"TA0006", tech:"OS Credential Dumping: LSASS Memory", tid:"T1003.001",
+        note:"Credentials are read out of process memory, including a cached domain administrator session from a recent helpdesk visit.",
+        block:[["edr",0.8],["harden",0.5],["pam",0.5]], detect:[["edr",0.78],["itdr",0.5]] },
+      { stage:"Lateral movement", taId:"TA0008", tech:"Remote Services", tid:"T1021",
+        note:"The recovered domain administrator credential is used to reach the payment approval systems.",
+        block:[["microseg",0.75],["pam",0.6],["laps",0.4]], detect:[["ndr",0.6],["itdr",0.65]] }
+    ]
+  },
+
+  {
+    id:"dns", name:"Exfiltration via DNS tunnelling",
+    sub:"Low and slow, under every threshold",
+    actor:"State-aligned espionage set", target:"Engineering design repository",
+    baseCost:42, records:"Product design and source repositories",
+    brief:"Assume the foothold already exists. This scenario is entirely about the exit route. The operator moves intellectual property out through DNS queries at a rate deliberately tuned to sit below volumetric alerting. It is the clearest demonstration that egress control is a security control, not a networking preference.",
+    steps:[
+      { stage:"Command and control", taId:"TA0011", tech:"Application Layer Protocol: DNS", tid:"T1071.004",
+        note:"The implant encodes commands in TXT record lookups against an attacker-controlled authoritative name server.",
+        block:[["pdns",0.7],["egress",0.3],["ngfw",0.2]], detect:[["pdns",0.65],["ndr",0.5]],
+        teach:"DNS is permitted outbound in essentially every network on earth, which is precisely why it is the preferred covert channel." },
+      { stage:"Command and control", taId:"TA0011", tech:"Dynamic Resolution: Domain Generation Algorithm", tid:"T1568.002",
+        note:"Callback domains rotate daily from a seeded algorithm, so blocklists are always one day behind.",
+        block:[["pdns",0.65]], detect:[["pdns",0.6],["ndr",0.5]] },
+      { stage:"Discovery", taId:"TA0007", tech:"File and Directory Discovery", tid:"T1083",
+        note:"Design repositories and CAD stores are located and indexed.",
+        block:[["microseg",0.45],["drm",0.2]], detect:[["edr",0.5],["dam",0.4]] },
+      { stage:"Collection", taId:"TA0009", tech:"Archive Collected Data", tid:"T1560",
+        note:"Files are compressed, encrypted and split into 180-byte fragments sized for DNS label encoding.",
+        block:[["dlp",0.3],["appctrl",0.25]], detect:[["edr",0.55],["dlp",0.35]],
+        teach:"Once the data is attacker-encrypted, content-inspection DLP is blind. DLP must catch data before the archive step or not at all." },
+      { stage:"Exfiltration", taId:"TA0010", tech:"Data Transfer Size Limits", tid:"T1030",
+        note:"Transfer is throttled to roughly 40 KB per hour, well under volumetric alert thresholds, and paused outside business hours.",
+        block:[], detect:[["ndr",0.4],["pdns",0.5]],
+        teach:"There is no block for patience. Detection here depends on entropy and query-structure analysis, not on volume thresholds." },
+      { stage:"Exfiltration", taId:"TA0010", tech:"Exfiltration Over Alternative Protocol", tid:"T1048",
+        note:"Eleven months of sustained transfer moves the full design archive out of the estate.",
+        block:[["pdns",0.75],["egress",0.5]], detect:[["ndr",0.6],["pdns",0.7],["dlp",0.3]] },
+      { stage:"Impact", taId:"TA0040", tech:"Intellectual Property Loss", tid:"—",
+        note:"A competing product reaches market with materially similar design characteristics.",
+        block:[["crypto",0.3],["drm",0.35]], detect:[] }
+    ]
+  },
+
+  {
+    id:"unpatched", name:"Unpatched infrastructure exploitation",
+    sub:"Virtual patching demonstration",
+    actor:"Opportunistic mass-exploitation operator", target:"Internet-facing management plane",
+    baseCost:57, records:"Hypervisor estate and all hosted workloads",
+    brief:"A critical vulnerability in an internet-facing appliance is published on a Tuesday. Mass exploitation begins within 36 hours. The change advisory board meets on the 14th. This scenario exists to show what virtual patching buys you in that gap — and what it does not.",
+    steps:[
+      { stage:"Reconnaissance", taId:"TA0043", tech:"Active Scanning: Vulnerability Scanning", tid:"T1595.002",
+        note:"Internet-wide scanning identifies the vulnerable build within hours of disclosure.",
+        block:[["ztna",0.6],["ngfw",0.35]], detect:[["ips",0.4],["ndr",0.3]],
+        teach:"Management planes should not be internet-reachable at all. Removing exposure beats patching speed every time." },
+      { stage:"Initial access", taId:"TA0001", tech:"Exploit Public-Facing Application", tid:"T1190",
+        note:"Unauthenticated remote code execution against the management interface, seven days before the change window.",
+        block:[["patch",0.9],["vpatch",0.8],["ips",0.62],["ngfw",0.3],["ztna",0.55]], detect:[["ips",0.6],["ndr",0.4]],
+        teach:"Run this step with patching OFF and virtual patching ON. The chain still breaks. That is the entire argument for compensating controls during the change-window gap." },
+      { stage:"Persistence", taId:"TA0003", tech:"Server Software Component: Web Shell", tid:"T1505.003",
+        note:"A web shell is written to the appliance filesystem, surviving reboot and the eventual patch.",
+        block:[["appctrl",0.6],["edr",0.5],["harden",0.35]], detect:[["edr",0.6],["ips",0.35]],
+        teach:"Patching after compromise does not remove the implant. This is why 'we patched it' is not the same as 'we are clean'." },
+      { stage:"Privilege escalation", taId:"TA0004", tech:"Exploitation for Privilege Escalation", tid:"T1068",
+        note:"A local kernel flaw takes the web shell to root on the appliance.",
+        block:[["patch",0.82],["vpatch",0.58],["harden",0.4]], detect:[["edr",0.5]] },
+      { stage:"Credential access", taId:"TA0006", tech:"Unsecured Credentials in Files", tid:"T1552.001",
+        note:"Service account credentials for the virtualisation platform are recovered from configuration on disk.",
+        block:[["pam",0.65],["crypto",0.3],["harden",0.35]], detect:[["itdr",0.5]] },
+      { stage:"Lateral movement", taId:"TA0008", tech:"Use Alternate Authentication Material", tid:"T1550",
+        note:"Those credentials authenticate to the hypervisor management plane, giving control of every hosted workload at once.",
+        block:[["microseg",0.72],["pam",0.6],["mfa",0.5]], detect:[["ndr",0.55],["itdr",0.6]],
+        teach:"Compromise of the virtualisation control plane is a single step that owns every guest. Segmenting and vaulting management access is disproportionately valuable." },
+      { stage:"Impact", taId:"TA0040", tech:"Data Encrypted for Impact", tid:"T1486",
+        note:"Datastores are encrypted at the hypervisor layer, bypassing every in-guest agent simultaneously.",
+        block:[["backup",0.85],["microseg",0.35]], detect:[["ndr",0.5]] }
+    ]
+  }
+];
+const SCN_BY_ID = Object.fromEntries(SCENARIOS.map(s => [s.id, s]));
+
+/* Presets: named starting postures. Rationale is shown in the UI so nobody
+   mistakes these for benchmarks — they are teaching positions. */
+const PRESETS = [
+  { id:"none", name:"Bare estate", desc:"Nothing enabled. Baseline for comparison.", set:[] },
+  { id:"legacy", name:"Legacy 2015 stack", desc:"Firewall, AV, patching, backups. Still common.",
+    set:["ngfw","av","patch","backup","email"] },
+  { id:"mid", name:"Typical mid-market 2026", desc:"Good endpoint and mail, weak east-west and identity.",
+    set:["ngfw","ips","email","pdns","edr","patch","harden","backup","av","mfa"] },
+  { id:"vcf", name:"Virtualisation-led stack", desc:"Segmentation and workload defence at the platform layer.",
+    set:["ngfw","ips","microseg","vpatch","edr","patch","harden","backup","ndr","crypto","email"] },
+  { id:"zt", name:"Mature zero trust", desc:"Identity-first, default-deny, tested recovery.",
+    set:["ztna","mfa","pam","itdr","laps","microseg","ndr","egress","edr","patch","appctrl","harden","backup","dlp","dam","email","pdns","waf","rate"] },
+  { id:"all", name:"Everything enabled", desc:"Unrealistic, but useful for showing residual risk.",
+    set:CONTROLS.map(c => c.id) }
+];
+
+/* ============================== ENGINE ================================== */
+/**
+ * Nominal dwell hours contributed by each tactic. Used only to produce a
+ * mean-time-to-detect figure so trainees can see that detection depth changes
+ * outcome even when nothing is blocked. Illustrative, not measured.
+ */
+const DWELL_HOURS = {
+  "Reconnaissance":24, "Initial access":2, "Execution":1, "Persistence":3,
+  "Privilege escalation":6, "Defence evasion":2, "Credential access":4,
+  "Discovery":9, "Lateral movement":14, "Collection":20,
+  "Command and control":5, "Exfiltration":40, "Impact":2
+};
+/** Scenarios that are deliberately slow. Multiplies dwell accrual. */
+const DWELL_FACTOR = { dns:9, api:6, cred:1, ransom:0.5, phish:1, unpatched:0.8 };
+
+const BLOCK_THRESHOLD  = 0.75;   // deterministic: combined efficacy needed to stop a step
+const DETECT_THRESHOLD = 0.50;   // deterministic: combined efficacy needed to raise a signal
+const RESPONSE_ALERTS  = 3;      // distinct detections before the SOC interrupts the chain
+
+/** Small seeded PRNG (mulberry32) so probabilistic runs are reproducible. */
+function makeRng(seed){
+  let a = seed >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Combine independent control efficacies.
+ * Two controls at 0.5 give 0.75, not 1.0 — overlapping controls stack with
+ * diminishing returns, which is the arithmetic behind defence in depth.
+ * @param {Array<[string,number]>} pairs  control id + efficacy
+ * @param {Set<string>} enabled           currently enabled control ids
+ * @returns {{score:number, terms:Array, missing:Array}}
+ */
+function combine(pairs, enabled){
+  let residual = 1;
+  const terms = [], missing = [];
+  for (const [id, p] of (pairs || [])){
+    if (enabled.has(id)) { residual *= (1 - p); terms.push({ id, p }); }
+    else missing.push({ id, p });
+  }
+  terms.sort((a,b) => b.p - a.p);
+  missing.sort((a,b) => b.p - a.p);
+  return { score: 1 - residual, terms, missing };
+}
+
+/**
+ * Walk the attack chain against the current posture.
+ * @returns {object} full result including per-step verdicts and headline metrics
+ */
+function evaluateChain(scenario, enabled, mode, seed){
+  const rng = makeRng(seed);
+  const factor = DWELL_FACTOR[scenario.id] ?? 1;
+  const results = [];
+  let dwell = 0, firstDetectAt = null, detections = 0;
+  let outcome = "breached", stoppedAt = null, stopReason = null;
+
+  let halted = false;
+  for (let i = 0; i < scenario.steps.length; i++){
+    const step = scenario.steps[i];
+    const b = combine(step.block, enabled);
+    const d = combine(step.detect, enabled);
+
+    // Steps after the chain broke are still scored, so the trainee can see
+    // what they were spared and which controls would have mattered next.
+    if (halted){
+      results.push({ index:i, step, block:b, detect:d, blocked:false, detected:false,
+                     state:"unreached", unreached:true, dwellAt:null });
+      continue;
+    }
+
+    const blocked  = mode === "prob" ? rng() < b.score : b.score >= BLOCK_THRESHOLD;
+    const detected = mode === "prob" ? rng() < d.score : d.score >= DETECT_THRESHOLD;
+
+    const row = {
+      index:i, step, block:b, detect:d, blocked, detected,
+      state: blocked ? "blocked" : (detected ? "detected" : "passed"),
+      dwellAt: dwell
+    };
+    results.push(row);
+
+    if (detected){
+      detections++;
+      if (firstDetectAt === null) firstDetectAt = dwell;
+    }
+    if (blocked){
+      outcome = "contained"; stoppedAt = i;
+      stopReason = b.terms.length
+        ? `Blocked by ${b.terms.map(t => CTL_BY_ID[t.id].name).join(" + ")}.`
+        : "Blocked.";
+      halted = true;
+      continue;
+    }
+    dwell += (DWELL_HOURS[step.stage] ?? 6) * factor;
+
+    // Enough independent signals to trigger human response before the chain finishes.
+    if (detections >= RESPONSE_ALERTS && i < scenario.steps.length - 1){
+      outcome = "response"; stoppedAt = i;
+      stopReason = `${detections} independent detections corroborated before completion. Response isolated the host.`;
+      halted = true;
+    }
+  }
+
+  const reached  = stoppedAt === null ? scenario.steps.length : stoppedAt + 1;
+  const progress = reached / scenario.steps.length;
+  const detectedEver = firstDetectAt !== null;
+
+  // Illustrative impact model. Deliberately simple and shown as such.
+  let cost = scenario.baseCost * Math.pow(progress, 1.7);
+  if (detectedEver) cost *= 0.55;
+  if (outcome !== "breached") cost *= 0.4;
+
+  return {
+    scenarioId: scenario.id, mode, seed, results, outcome, stoppedAt, stopReason,
+    reached, total: scenario.steps.length, progress, detections,
+    mttd: firstDetectAt, dwell,
+    cost: Math.max(0, cost / 10),                  // scenario.baseCost is in $100k units
+    dataLost: outcome === "breached" ? scenario.records : null,
+    at: Date.now()
+  };
+}
+
+/** Coverage index — breadth of enabled controls, weighted. Not a risk score. */
+function postureScore(enabled){
+  let w = 0;
+  for (const c of CONTROLS) if (enabled.has(c.id)) w += c.weight;
+  return { pct: Math.round((w / MAX_WEIGHT) * 100), weight: w };
+}
+function postureWord(pct){
+  if (pct === 0)  return "No controls";
+  if (pct < 20)   return "Minimal";
+  if (pct < 40)   return "Partial";
+  if (pct < 62)   return "Layered";
+  if (pct < 84)   return "Defence in depth";
+  return "Saturated";
+}
+
+/* ============================== STORE =================================== */
+/* IndexedDB is used only for run history and saved postures on this device.
+   If it is unavailable (private browsing, blocked storage) everything falls
+   back to memory and the footer says so. Nothing is ever sent anywhere. */
+const Store = (() => {
+  const DB = "cda-v1";
+  let db = null, ok = false;
+  const mem = { runs: [] };
+
+  function open(){
+    return new Promise(resolve => {
+      if (!("indexedDB" in window)) return resolve(false);
+      let req;
+      try { req = indexedDB.open(DB, 1); } catch { return resolve(false); }
+      req.onupgradeneeded = e => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains("runs"))     d.createObjectStore("runs", { keyPath:"id", autoIncrement:true });
+        if (!d.objectStoreNames.contains("postures")) d.createObjectStore("postures", { keyPath:"name" });
+      };
+      req.onsuccess = e => { db = e.target.result; ok = true; resolve(true); };
+      req.onerror   = () => resolve(false);
+      setTimeout(() => resolve(ok), 1500);  // never block first paint on storage
+    });
+  }
+  function tx(store, mode){ return db.transaction(store, mode).objectStore(store); }
+
+  async function addRun(rec){
+    mem.runs.unshift(rec);
+    mem.runs = mem.runs.slice(0, 40);
+    if (!ok) return;
+    try {
+      tx("runs","readwrite").add(rec);
+    } catch (err){ console.warn("[cda] run not persisted:", err); }
+  }
+  async function listRuns(){
+    if (!ok) return mem.runs.slice(0, 12);
+    return new Promise(resolve => {
+      try {
+        const r = tx("runs","readonly").getAll();
+        r.onsuccess = () => resolve(r.result.sort((a,b) => b.at - a.at).slice(0, 12));
+        r.onerror   = () => resolve(mem.runs.slice(0, 12));
+      } catch { resolve(mem.runs.slice(0, 12)); }
+    });
+  }
+  async function clear(){
+    mem.runs = [];
+    if (!ok) return;
+    try { tx("runs","readwrite").clear(); tx("postures","readwrite").clear(); }
+    catch (err){ console.warn("[cda] clear failed:", err); }
+  }
+  return { open, addRun, listRuns, clear, available: () => ok };
+})();
+
+/* ============================ SOURCES ===================================
+   Where every externally-checkable claim in this app came from, and — just
+   as important — which parts have no external source at all. Last verified
+   15 August 2026. If you are reading this months later, re-check the
+   vendor names; they move faster than anything else here.
+   ===================================================================== */
+const SOURCES = [
+  { group:"Attack techniques (T-numbers)",
+    note:"Every technique ID and name is taken from MITRE ATT&CK Enterprise v19.2 and was checked against the live index, not from memory.",
+    items:[
+      { claim:"Full technique and sub-technique index", url:"https://attack.mitre.org/techniques/enterprise/" },
+      { claim:"T1030 Data Transfer Size Limits — used for the low-and-slow DNS step", url:"https://attack.mitre.org/techniques/T1030" },
+      { claim:"T1606.001 Forge Web Credentials: Web Cookies — used for the token-tampering step", url:"https://attack.mitre.org/techniques/T1606/001/" },
+      { claim:"T1589.003 Gather Victim Identity Information: Employee Names", url:"https://attack.mitre.org/techniques/T1589/003/" },
+      { claim:"T1205 Traffic Signaling — checked and deliberately NOT used; it is port knocking, not throttling", url:"https://attack.mitre.org/techniques/T1205/" }
+    ]},
+  { group:"Mitigations (M-numbers)",
+    note:"All 44 enterprise mitigations were pulled as a list and each control's mapping checked against it.",
+    items:[
+      { claim:"Full mitigation index", url:"https://attack.mitre.org/mitigations/enterprise/" }
+    ]},
+  { group:"Vendor and product names",
+    note:"Named for orientation only, no endorsement. Checked against the vendor's own material where the name had plausibly changed.",
+    items:[
+      { claim:"VMware vDefend Distributed Firewall (the former NSX security line)", url:"https://www.vmware.com/products/security/vdefend-distributed-firewall" },
+      { claim:"vDefend Distributed Firewall product documentation", url:"https://techdocs.broadcom.com/us/en/vmware-security-load-balancing/vdefend/vdefend-firewall/4-2/vdefend-distributed-firewall.html" },
+      { claim:"Abnormal Security legally renamed Abnormal AI, Inc. in April 2025", url:"https://abnormal.ai/newsroom/press-releases/announcing-abnormal-ai" },
+      { claim:"BloxOne branding retired; the product is Infoblox Threat Defense", url:"https://www.infoblox.com/products/threat-defense/" },
+      { claim:"Carbon Black divestment was abandoned; it stays in Broadcom's portfolio", url:"https://www.csoonline.com/article/1310164/broadcom-pauses-sale-of-carbon-black-as-euc-deal-goes-through.html" }
+    ]},
+  { group:"Regulatory references",
+    note:"Only one appears in the app, in the API scenario.",
+    items:[
+      { claim:"India DPDP Rules notified Nov 2025; substantive obligations commence 14 May 2027", url:"https://www.amsshardul.com/insight/enforcement-of-the-dpdp-act-and-notification-of-the-dpdp-rules/" }
+    ]}
+];
+
+/* Everything in this list is MINE. No source exists because none was used. */
+const UNSOURCED = [
+  "Every efficacy weight (the 0.00–1.00 numbers on each control, for each step). These are informed judgements chosen to teach how controls relate. They are not measured, not benchmarked, and no vendor product was tested to produce them.",
+  "The 0.75 block threshold, the 0.50 detection threshold, and the three-detection response rule. Modelling choices, explained in the model panel.",
+  "Dwell-hour figures and the per-scenario pacing multipliers, which produce the time-to-detect number.",
+  "The illustrative impact figure in the exported report. It scales with chain progress; it is not actuarial and not derived from breach-cost research.",
+  "The scenario narratives, volumes and record counts. Composites written to be plausible, not case studies of real incidents.",
+  "The composition of each posture preset, including the deliberate omission of identity controls from the virtualisation-led preset.",
+  "The 'where this breaks in practice' note on every control. Field opinion, offered as opinion."
+];
+
+/* =============================== UI ===================================== */
+const $  = s => document.querySelector(s);
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const hrs = h => h == null ? "not detected" : (h < 48 ? `${Math.round(h)} hours` : `${(h/24).toFixed(1)} days`);
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wait = ms => new Promise(r => setTimeout(r, reduced ? 0 : ms));
+
+const UI = (() => {
+  const state = {
+    scnId: SCENARIOS[0].id,
+    enabled: new Set(),
+    mode: "det",
+    seed: 20260815,
+    result: null,
+    prev: null,          // previous result, for the before/after strip
+    playing: false,
+    runToken: 0,
+    showMaths: false,
+    stepsOpen: false,
+    openLayers: new Set(LAYERS.map(l => l.id))
+  };
+
+  const VERDICT = {
+    contained: { word:"Stopped",  state:"contained" },
+    response:  { word:"Contained", state:"response" },
+    breached:  { word:"Breached", state:"breached" }
+  };
+
+  /* ---------------- toasts + tooltips ---------------- */
+  function toast(msg){
+    const t = el("div", "toast", `<svg class="ic" style="width:15px;height:15px"><use href="#i-check"/></svg>${esc(msg)}`);
+    $("#toasts").appendChild(t);
+    setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 320); }, 2200);
+  }
+  const tipEl = $("#tip");
+  function bindTips(root){
+    root.querySelectorAll("[data-tip]").forEach(n => {
+      if (n.dataset.tipBound) return;
+      n.dataset.tipBound = "1";
+      const show = () => {
+        tipEl.innerHTML = (n.dataset.tipTitle ? `<b>${esc(n.dataset.tipTitle)}</b>` : "") + esc(n.dataset.tip);
+        tipEl.dataset.open = "true";
+        const r = n.getBoundingClientRect(), tr = tipEl.getBoundingClientRect();
+        let left = Math.max(10, Math.min(r.left + r.width/2 - tr.width/2, window.innerWidth - tr.width - 10));
+        let top = r.top - tr.height - 9; if (top < 8) top = r.bottom + 9;
+        tipEl.style.left = left + "px"; tipEl.style.top = top + "px";
+      };
+      const hide = () => { tipEl.dataset.open = "false"; };
+      n.addEventListener("mouseenter", show); n.addEventListener("mouseleave", hide);
+      n.addEventListener("focus", show);      n.addEventListener("blur", hide);
+    });
+  }
+
+  /* ================= THE CENTRE ==================
+     One verdict, one sentence, one track. Nothing else until asked for. */
+
+  /** Build the segment track once per scenario. */
+  function buildTrack(){
+    const n = SCN_BY_ID[state.scnId].steps.length;
+    const t = $("#track"); t.innerHTML = "";
+    for (let i = 0; i < n; i++) t.appendChild(el("div", "track-seg"));
+  }
+
+  /** Paint the track to match a result. `stagger` spreads the fill over time. */
+  function paintTrack(r, upto, stagger){
+    const segs = [...$("#track").children];
+    segs.forEach((seg, i) => {
+      seg.className = "track-seg";
+      seg.style.transitionDelay = stagger ? `${Math.min(i, upto) * 45}ms` : "0ms";
+      if (i > upto) return;
+      const row = r.results[i];
+      if (row.state === "blocked") seg.classList.add("stop");
+      else if (r.outcome === "response" && i === r.stoppedAt) seg.classList.add("resp");
+      else seg.classList.add("reached");
+    });
+  }
+
+  function verdictLine(r){
+    const s = SCN_BY_ID[state.scnId];
+    if (r.outcome === "contained"){
+      const names = r.results[r.stoppedAt].block.terms.map(t => CTL_BY_ID[t.id].name);
+      return `Stopped at step ${r.reached} of ${r.total} by ${listWords(names)}. The remaining ${r.total - r.reached} steps never happened.`;
+    }
+    if (r.outcome === "response"){
+      return `Nothing blocked the attack, but ${r.detections} separate controls raised a signal by step ${r.reached}. Response isolated the host before the objective.`;
+    }
+    return r.detections
+      ? `The attack finished all ${r.total} steps. ${r.detections} signal${r.detections>1?"s":""} fired, the first after ${hrs(r.mttd)} — too late. Lost: ${s.records}.`
+      : `The attack finished all ${r.total} steps and nothing raised a signal at any point. Lost: ${s.records}.`;
+  }
+  function listWords(a){
+    if (a.length === 0) return "a control";
+    if (a.length === 1) return a[0];
+    return a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  }
+
+  /** The whole point of the screen: show the verdict changing. */
+  function renderHero(animate){
+    const r = state.result, s = SCN_BY_ID[state.scnId];
+    const v = VERDICT[r.outcome];
+    const hero = $("#hero"), word = $("#hero-word");
+
+    $("#hero-eyebrow").textContent =
+      `${String(SCENARIOS.findIndex(x => x.id === s.id) + 1).padStart(2,"0")} · ${s.name}`;
+    hero.dataset.state = v.state;
+
+    if (animate && word.textContent !== v.word){
+      word.classList.remove("in"); void word.offsetWidth;
+      word.textContent = v.word; word.classList.add("in");
+    } else {
+      word.textContent = v.word;
+    }
+    const line = $("#hero-line");
+    line.style.animation = "none"; void line.offsetWidth; line.style.animation = "";
+    line.textContent = verdictLine(r);
+
+    paintTrack(r, r.reached - 1, true);
+    $("#track-left").textContent  = `Step ${r.reached} of ${r.total}`;
+    $("#track-right").textContent = r.mttd == null ? "No detection" : `Seen after ${hrs(r.mttd)}`;
+  }
+
+  /** Before / after — only shown when a change actually changed the answer. */
+  function renderCompare(){
+    const slot = $("#compare-slot"), a = state.prev, b = state.result;
+    if (!a || !b || a.scenarioId !== b.scenarioId) return;
+    if (a.outcome === b.outcome && a.reached === b.reached) return;
+
+    slot.innerHTML = "";
+    const wrap = el("div", "compare");
+    wrap.innerHTML = `
+      <div class="cmp-side was"><b>${a.reached}/${a.total}</b><span>${esc(VERDICT[a.outcome].word)} before</span></div>
+      <svg class="ic cmp-arrow" style="width:19px;height:19px" aria-hidden="true"><use href="#i-arrow"/></svg>
+      <div class="cmp-side now" style="color:${a.reached > b.reached ? "var(--blocked)" : "var(--breach)"}">
+        <b>${b.reached}/${b.total}</b><span style="color:inherit;opacity:.7">${esc(VERDICT[b.outcome].word)} now</span></div>`;
+    slot.appendChild(wrap);
+    clearTimeout(slot._t);
+    slot._t = setTimeout(() => {
+      wrap.classList.add("out");
+      setTimeout(() => { if (wrap.parentNode) slot.innerHTML = ""; }, 340);
+    }, 5200);
+  }
+
+  /* ---------------- the run ---------------- */
+  async function play(){
+    if (state.playing) return;
+    const token = ++state.runToken;
+    state.playing = true;
+    $("#btn-run").disabled = true;
+    $("#compare-slot").innerHTML = "";
+
+    const r = state.result, n = r.reached;
+    const nar = $("#narrate"); nar.hidden = false;
+    $("#hero").dataset.state = "";
+    $("#hero-word").textContent = "Running";
+    $("#hero-line").textContent = "Watching the chain step by step.";
+    paintTrack(r, -1, false);
+
+    for (let i = 0; i < n; i++){
+      if (token !== state.runToken) return;
+      const row = r.results[i], step = row.step;
+      const layer = row.block.terms.length ? LAYER_BY_ID[CTL_BY_ID[row.block.terms[0].id].layer] : null;
+
+      nar.innerHTML = `<div class="swap">
+        <div class="narrate-tags">
+          <span class="tag">${esc(step.stage)}</span>
+          <span class="tag tag-mitre">${esc(String(step.tid).split(",")[0])}</span>
+          ${layer ? `<span class="tag tag-layer" style="background:${layer.hex}">${esc(layer.name)}</span>` : ""}
+        </div>
+        <h3>${esc(step.tech)}</h3>
+        <p>${esc(step.note)}</p></div>`;
+
+      const segs = [...$("#track").children];
+      segs.forEach(x => x.classList.remove("now"));
+      const seg = segs[i];
+      seg.style.transitionDelay = "0ms";
+      seg.classList.add(row.state === "blocked" ? "stop" : (r.outcome === "response" && i === r.stoppedAt ? "resp" : "reached"), "now");
+
+      await wait(1150);
+    }
+    if (token !== state.runToken) return;
+
+    [...$("#track").children].forEach(x => x.classList.remove("now"));
+    nar.hidden = true; nar.innerHTML = "";
+    state.playing = false;
+    $("#btn-run").disabled = false;
+    renderHero(true);
+    renderSteps();
+    await Store.addRun({
+      at: r.at, scenarioId: r.scenarioId, outcome: r.outcome,
+      reached: r.reached, total: r.total, score: postureScore(state.enabled).pct, mode: r.mode
+    });
+    renderHistory();
+  }
+  function cancelRun(){
+    state.runToken++; state.playing = false;
+    $("#btn-run").disabled = false;
+    $("#narrate").hidden = true; $("#narrate").innerHTML = "";
+  }
+
+  /* ---------------- the disclosure: full chain ---------------- */
+  function mathLine(r){
+    const fmt = t => `${esc(CTL_BY_ID[t.id].name)} <b>${t.p.toFixed(2)}</b>`;
+    if (r.unreached)
+      return `<div>block <b>${r.block.score.toFixed(2)}</b> &middot; detect <b>${r.detect.score.toFixed(2)}</b> &mdash; <span style="color:var(--ink-3)">chain broke before this step</span></div>`;
+    let out = r.block.terms.length
+      ? `<div>block &nbsp;${r.block.terms.map(fmt).join(" &oplus; ")} &rarr; <b>${r.block.score.toFixed(2)}</b> ` +
+        (r.blocked ? `<span class="ok">&ge; ${BLOCK_THRESHOLD.toFixed(2)} BLOCKED</span>` : `<span class="no">&lt; ${BLOCK_THRESHOLD.toFixed(2)} PASSED</span>`) + `</div>`
+      : `<div>block &nbsp;<span class="no">no control enabled &rarr; 0.00</span></div>`;
+    out += r.detect.terms.length
+      ? `<div>detect ${r.detect.terms.map(fmt).join(" &oplus; ")} &rarr; <b>${r.detect.score.toFixed(2)}</b> ` +
+        (r.detected ? `<span class="warn">SIGNAL</span>` : `<span class="no">below threshold</span>`) + `</div>`
+      : `<div>detect <span class="no">no telemetry on this technique</span></div>`;
+    return out;
+  }
+
+  function renderSteps(){
+    if (!state.stepsOpen) return;
+    const box = $("#ledger"); box.innerHTML = "";
+    const r = state.result;
+    if (!r) return;
+
+    // Only the decisive step carries fix-it chips. Everything else stays quiet.
+    const decisive = r.outcome === "breached"
+      ? r.results.findIndex(x => !x.blocked && !x.unreached && x.block.missing.length)
+      : r.stoppedAt;
+
+    r.results.forEach((row, i) => {
+      const cls = row.unreached ? "st-idle is-quiet" : "st-" + row.state;
+      const node = el("div", "step " + cls);
+      const layer = row.block.terms.length ? LAYER_BY_ID[CTL_BY_ID[row.block.terms[0].id].layer] : null;
+      const word = row.unreached ? "Not reached"
+        : ({ blocked:"Blocked", detected:"Detected", passed:"Passed" })[row.state];
+
+      node.innerHTML = `
+        <span class="step-idx">${String(i+1).padStart(2,"0")}</span>
+        <div>
+          <div class="step-tags">
+            <span class="tag">${esc(row.step.stage)}</span>
+            <span class="tag tag-mitre">${esc(row.step.tid)}</span>
+            ${layer ? `<span class="tag tag-layer" style="background:${layer.hex}">${esc(layer.name)}</span>` : ""}
+          </div>
+          <h4>${esc(row.step.tech)}</h4>
+          <p>${esc(row.step.note)}</p>
+          ${state.showMaths ? `<div class="step-math">${mathLine(row)}</div>` : ""}
+          ${state.showMaths && row.step.teach ? `<p style="margin-top:8px;border-left:3px solid var(--line-2);padding-left:10px">${esc(row.step.teach)}</p>` : ""}
+          <div class="fix"></div>
+        </div>
+        <span class="step-state">${word}</span>`;
+
+      const fix = node.querySelector(".fix");
+      if (i === decisive && !row.blocked && !row.unreached && row.block.missing.length){
+        fix.appendChild(el("span", "fix-lbl", "Turn one on"));
+        row.block.missing.slice(0, 3).forEach(g => {
+          const c = CTL_BY_ID[g.id], l = LAYER_BY_ID[c.layer];
+          const chip = el("button", "chip", `<i style="background:${l.hex}"></i>${esc(c.name)}`);
+          chip.type = "button";
+          chip.addEventListener("click", () => {
+            state.enabled.add(c.id);
+            renderMatrix(); renderPosture(); evaluate();
+          });
+          fix.appendChild(chip);
+        });
+      } else fix.remove();
+      box.appendChild(node);
+    });
+  }
+
+  /* ---------------- rails (unchanged behaviour) ---------------- */
+  function renderScenarios(){
+    const box = $("#scn-list"); box.innerHTML = "";
+    SCENARIOS.forEach((s, i) => {
+      const b = el("button", "scn");
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(s.id === state.scnId));
+      b.innerHTML = `<span class="scn-num">${String(i+1).padStart(2,"0")}</span>
+        <span><span class="scn-t">${esc(s.name)}</span><span class="scn-s">${esc(s.sub)}</span></span>`;
+      b.addEventListener("click", () => {
+        cancelRun();
+        state.scnId = s.id; state.prev = null;
+        renderScenarios(); renderBrief(); buildTrack(); evaluate();
+      });
+      box.appendChild(b);
+    });
+    $("#scn-count").textContent = SCENARIOS.length;
+  }
+
+  function renderBrief(){
+    const s = SCN_BY_ID[state.scnId];
+    $("#brief").innerHTML = `
+      <dl><dt>Actor</dt><dd>${esc(s.actor)}</dd>
+      <dt>Target</dt><dd>${esc(s.target)}</dd>
+      <dt>Chain</dt><dd>${s.steps.length} steps</dd></dl>
+      <p>${esc(s.brief)}</p>`;
+  }
+
+  function renderMatrix(){
+    const box = $("#matrix"); box.innerHTML = "";
+    LAYERS.forEach(layer => {
+      const list = CONTROLS.filter(c => c.layer === layer.id);
+      const on = list.filter(c => state.enabled.has(c.id)).length;
+      const wrap = el("div", "lyr");
+      wrap.dataset.open = String(state.openLayers.has(layer.id));
+      const hd = el("button", "lyr-hd");
+      hd.type = "button";
+      hd.setAttribute("aria-expanded", wrap.dataset.open);
+      hd.innerHTML = `<span class="lyr-dot" style="background:${layer.hex}"></span>
+        <span class="lyr-name" style="color:${layer.hex}">${esc(layer.name)}</span>
+        <span class="lyr-tally">${on}/${list.length}</span>
+        <svg class="ic lyr-chev" style="width:15px;height:15px"><use href="#i-chev"/></svg>`;
+      hd.dataset.tip = layer.blurb; hd.dataset.tipTitle = layer.name + " layer";
+      hd.addEventListener("click", () => {
+        state.openLayers.has(layer.id) ? state.openLayers.delete(layer.id) : state.openLayers.add(layer.id);
+        renderMatrix();
+      });
+      wrap.appendChild(hd);
+      const bd = el("div", "lyr-bd");
+      list.forEach(c => {
+        const row = el("div", "ctl" + (state.enabled.has(c.id) ? " is-on" : ""));
+        row.innerHTML = `
+          <span><span class="ctl-name">${esc(c.name)}</span><span class="ctl-sub">${esc(c.sub)}</span></span>
+          <button class="info-btn" type="button" aria-label="About ${esc(c.name)}">
+            <svg class="ic" style="width:12px;height:12px"><use href="#i-info"/></svg></button>
+          <label class="tgl${c.weak ? " weak" : ""}">
+            <input type="checkbox" ${state.enabled.has(c.id) ? "checked" : ""} aria-label="Enable ${esc(c.name)}"><span></span></label>`;
+        row.querySelector("input").addEventListener("change", e => {
+          if (e.target.checked) state.enabled.add(c.id); else state.enabled.delete(c.id);
+          renderMatrix(); renderPosture(); evaluate();
+        });
+        row.querySelector(".info-btn").addEventListener("click", () => openControl(c.id));
+        bd.appendChild(row);
+      });
+      wrap.appendChild(bd);
+      box.appendChild(wrap);
+    });
+    $("#ctl-count").textContent = `${state.enabled.size}/${CONTROLS.length}`;
+    bindTips(box);
+  }
+
+  function renderPosture(){
+    const p = postureScore(state.enabled);
+    $("#posture-score").textContent = p.pct;
+    $("#posture-word").textContent = postureWord(p.pct);
+    const bar = $("#posture-bar"); bar.innerHTML = "";
+    LAYERS.forEach(l => {
+      const wOn = CONTROLS.filter(c => c.layer === l.id && state.enabled.has(c.id)).reduce((s,c) => s + c.weight, 0);
+      const seg = el("i");
+      seg.style.width = (wOn / MAX_WEIGHT * 100) + "%";
+      seg.style.background = l.hex;
+      bar.appendChild(seg);
+    });
+    $("#ctl-count").textContent = `${state.enabled.size}/${CONTROLS.length}`;
+  }
+
+  function renderPresets(){
+    const box = $("#presets"); box.innerHTML = "";
+    PRESETS.forEach(p => {
+      const b = el("button", "preset");
+      b.type = "button";
+      b.innerHTML = `<span><b>${esc(p.name)}</b><span>${esc(p.desc)}</span></span>
+        <svg class="ic" style="width:15px;height:15px"><use href="#i-plus"/></svg>`;
+      b.addEventListener("click", () => {
+        state.enabled = new Set(p.set);
+        renderMatrix(); renderPosture(); evaluate();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  async function renderHistory(){
+    const rows = await Store.listRuns();
+    const box = $("#hist"); box.innerHTML = "";
+    $("#hist-count").textContent = rows.length;
+    if (!rows.length){
+      box.appendChild(el("div", "empty", "No runs yet. Outcomes are recorded here, on this device only."));
+      return;
+    }
+    rows.forEach(r => {
+      const colour = r.outcome === "contained" ? "var(--blocked)" : r.outcome === "response" ? "var(--alert)" : "var(--breach)";
+      const row = el("div", "hist-row");
+      row.innerHTML = `<i style="background:${colour}"></i>
+        <b>${esc((SCN_BY_ID[r.scenarioId] || {}).name || r.scenarioId)}</b>
+        <span>${r.reached}/${r.total} &middot; ${r.score}%</span>`;
+      box.appendChild(row);
+    });
+  }
+
+  /* ---------------- modal ---------------- */
+  const scrim = $("#scrim");
+  function openModal(eyebrow, title, html){
+    $("#modal-eyebrow").textContent = eyebrow;
+    $("#modal-title").textContent = title;
+    $("#modal-bd").innerHTML = html;
+    scrim.dataset.open = "true"; $("#modal-x").focus();
+  }
+  function closeModal(){ scrim.dataset.open = "false"; }
+  function controlHtml(c){
+    const l = LAYER_BY_ID[c.layer];
+    return `
+      <div class="kb-sec"><span class="eyebrow" style="color:${l.hex}">${esc(l.name)} layer &middot; ${esc(c.mitigation)}</span>
+        <p>${esc(c.what)}</p></div>
+      <div class="kb-sec"><span class="eyebrow">What it actually stops</span><p>${esc(c.stops)}</p></div>
+      <div class="kb-sec"><span class="eyebrow">Representative vendors, 2026</span>
+        <div class="vendors">${c.vendors.map(v => `<span class="vendor">${esc(v)}</span>`).join("")}</div>
+        <p style="font-size:11.5px;color:var(--ink-4);margin-top:7px">Named for orientation only. No endorsement or ranking implied.</p></div>
+      <div class="kb-sec"><div class="caveat"><b>Where this breaks in practice</b>${esc(c.caveat)}</div></div>`;
+  }
+  function openControl(id){ const c = CTL_BY_ID[id]; openModal("Reference knowledge base", c.name, controlHtml(c)); }
+  function openKbIndex(){
+    const html = LAYERS.map(l => `
+      <div class="kb-sec">
+        <span class="eyebrow" style="color:${l.hex}">${esc(l.name)} &middot; ${CONTROLS.filter(c=>c.layer===l.id).length} controls</span>
+        <p style="margin-bottom:8px">${esc(l.blurb)}</p>
+        <div class="vendors">${CONTROLS.filter(c => c.layer === l.id)
+          .map(c => `<button class="vendor" type="button" data-ctl="${c.id}" style="cursor:pointer">${esc(c.name)}</button>`).join("")}</div>
+      </div>`).join("");
+    openModal("Reference knowledge base", "All 26 controls", html);
+    $("#modal-bd").querySelectorAll("[data-ctl]").forEach(b => b.addEventListener("click", () => openControl(b.dataset.ctl)));
+  }
+  /** The citation map. Sourced claims first, then an explicit list of what
+      has no source at all — which is the part worth reading. */
+  function openSources(){
+    const sourced = SOURCES.map(g => `
+      <div class="kb-sec">
+        <span class="eyebrow">${esc(g.group)}</span>
+        <p style="margin-bottom:9px">${esc(g.note)}</p>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          ${g.items.map(i => `<a class="src" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">
+              <span>${esc(i.claim)}</span>
+              <span class="src-url">${esc(i.url.replace(/^https?:\/\//,"").split("/")[0])}</span>
+            </a>`).join("")}
+        </div>
+      </div>`).join("");
+    openModal("Citation map", "Where every claim comes from", `
+      <div class="kb-sec"><p style="margin-bottom:0">Externally checkable claims are listed first with their source. Everything after them is my own judgement with no source behind it. Last verified <b>15 August 2026</b> against ATT&CK v19.2.</p></div>
+      ${sourced}
+      <div class="kb-sec">
+        <span class="eyebrow" style="color:var(--breach)">Not sourced — my judgement, not evidence</span>
+        <p style="margin-bottom:9px">These carry no citation because none exists. Treat them as a position to argue with, not a finding to quote.</p>
+        <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px">
+          ${UNSOURCED.map(u => `<li style="font-size:12.8px;line-height:1.55;color:var(--ink-2)">${esc(u)}</li>`).join("")}
+        </ul>
+      </div>
+      <div class="kb-sec"><div class="caveat"><b>How to re-verify</b>
+        Technique and mitigation IDs are stable and easy to re-check at the two MITRE index links above. Vendor names decay fastest — assume anything here is stale after about six months and check the vendor's own site, not a reseller page.</div></div>`);
+  }
+
+  function openModelNotes(){
+    openModal("How this model works", "The arithmetic behind every verdict", `
+      <div class="kb-sec"><span class="eyebrow">Combining controls</span>
+        <p>Each control has an efficacy between 0 and 1 for each specific technique. Controls combine as independent probabilities, so two at 0.50 give <b>0.75</b>, not 1.00. Overlapping controls stack with diminishing returns. That arithmetic is the argument for defence in depth.</p></div>
+      <div class="kb-sec"><span class="eyebrow">Why the block threshold is 0.75, not 0.50</span>
+        <p>Efficacy is per attempt, and a targeted operator retries. A control set that stops half of attempts loses to someone who tries twice, so a step counts as blocked only at <b>0.75</b> combined efficacy or above. A single average control rarely breaks a chain alone — which matches the field.</p></div>
+      <div class="kb-sec"><span class="eyebrow">Detection and response</span>
+        <p>Detection scores separately at a <b>0.50</b> threshold and never blocks a step by itself. After <b>3</b> independent detections the chain stops as <i>contained</i>, assuming someone acts on the third corroborating signal. If nobody is watching your estate, turn the detection-only controls off and see what changes.</p></div>
+      <div class="kb-sec"><span class="eyebrow">Source of the identifiers</span>
+        <p>Every technique ID (T-number) and mitigation ID (M-number) in this simulator was checked against MITRE ATT&amp;CK Enterprise <b>v19.2</b> in August 2026. ATT&amp;CK is a registered trademark of The MITRE Corporation; the identifiers are reproduced here under their terms of use. The efficacy weights attached to them are mine, not MITRE's.</p></div>
+      <div class="kb-sec"><div class="caveat"><b>What this model is not</b>
+        The efficacy weights are informed judgements chosen to teach relationships between controls. They are not measured from any estate, yours included, and no vendor's product was tested to produce them. Use this to argue about architecture, not to size a budget.</div></div>`);
+  }
+
+  /* ---------------- export ---------------- */
+  function exportReport(){
+    const r = state.result, s = SCN_BY_ID[state.scnId], p = postureScore(state.enabled);
+    const on = CONTROLS.filter(c => state.enabled.has(c.id)), off = CONTROLS.filter(c => !state.enabled.has(c.id));
+    const L = [];
+    L.push(`# CyberDefense Architect — run report`);
+    L.push(`\nGenerated ${new Date().toISOString()} · model v1.3.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
+    L.push(`\n## Scenario\n**${s.name}** — ${s.sub}\n\n${s.brief}`);
+    L.push(`\n## Outcome\n- Verdict: **${VERDICT[r.outcome].word}**\n- Reached: step ${r.reached} of ${r.total}\n- Detections: ${r.detections}\n- Time to first detection: ${hrs(r.mttd)}\n- Illustrative impact: $${r.cost.toFixed(1)}M\n- Coverage index: ${p.pct}/100 (${postureWord(p.pct)})`);
+    if (r.stopReason) L.push(`- ${r.stopReason}`);
+    L.push(`\n## Chain\n`);
+    r.results.forEach((row, i) => {
+      L.push(`### ${String(i+1).padStart(2,"0")} · ${row.step.stage} · ${row.step.tid} — ${row.step.tech}${row.unreached ? "  _(not reached)_" : ""}`);
+      L.push(`${row.step.note}`);
+      if (row.unreached){
+        L.push(`- Chain broke before this step. Block ${row.block.score.toFixed(2)}, detect ${row.detect.score.toFixed(2)} had it continued.`); L.push(""); return;
+      }
+      L.push(`- Block: ${row.block.terms.length ? row.block.terms.map(t => `${CTL_BY_ID[t.id].name} ${t.p.toFixed(2)}`).join(" + ") : "none enabled"} → ${row.block.score.toFixed(2)} (${row.blocked ? "BLOCKED" : "passed"})`);
+      L.push(`- Detect: ${row.detect.terms.length ? row.detect.terms.map(t => `${CTL_BY_ID[t.id].name} ${t.p.toFixed(2)}`).join(" + ") : "no telemetry"} → ${row.detect.score.toFixed(2)} (${row.detected ? "signal" : "silent"})`);
+      if (!row.blocked && row.block.missing.length)
+        L.push(`- Gap: ${row.block.missing.map(t => `${CTL_BY_ID[t.id].name} ${t.p.toFixed(2)}`).join(", ")}`);
+      L.push("");
+    });
+    L.push(`## Posture\n\n**Enabled (${on.length})**\n${on.map(c => `- ${LAYER_BY_ID[c.layer].name} · ${c.name}`).join("\n") || "- none"}`);
+    L.push(`\n**Not enabled (${off.length})**\n${off.map(c => `- ${LAYER_BY_ID[c.layer].name} · ${c.name}`).join("\n") || "- none"}`);
+    L.push(`\n---\nEfficacy weights are informed teaching judgements, not measured data from any estate. Impact figures are illustrative. Training artefact, not a risk assessment.`);
+    const blob = new Blob([L.join("\n")], { type:"text/markdown" });
+    const a = el("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `cda-${s.id}-${new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("Report downloaded");
+  }
+
+  /* ---------------- cycle ---------------- */
+  function evaluate(){
+    if (state.playing) cancelRun();
+    state.prev = state.result;
+    state.result = evaluateChain(SCN_BY_ID[state.scnId], state.enabled, state.mode, state.seed);
+    renderHero(true);
+    renderCompare();
+    renderSteps();
+  }
+
+  function wire(){
+    $("#btn-run").addEventListener("click", play);
+    $("#btn-steps").addEventListener("click", () => {
+      state.stepsOpen = !state.stepsOpen;
+      $("#steps-panel").hidden = !state.stepsOpen;
+      $("#btn-steps").setAttribute("aria-expanded", String(state.stepsOpen));
+      $("#btn-steps").textContent = state.stepsOpen ? "Hide steps" : "Show all steps";
+      renderSteps();
+    });
+    $("#btn-maths").addEventListener("click", () => {
+      state.showMaths = !state.showMaths;
+      $("#btn-maths").setAttribute("aria-pressed", String(state.showMaths));
+      $("#btn-maths").textContent = state.showMaths ? "Hide the maths" : "Show the maths";
+      renderSteps();
+    });
+    $("#btn-model").addEventListener("click", openModelNotes);
+    $("#btn-kb").addEventListener("click", openKbIndex);
+    $("#btn-sources").addEventListener("click", openSources);
+    $("#btn-export").addEventListener("click", exportReport);
+    $("#btn-wipe").addEventListener("click", async () => { await Store.clear(); renderHistory(); toast("Local data cleared"); });
+    $("#modal-x").addEventListener("click", closeModal);
+    scrim.addEventListener("click", e => { if (e.target === scrim) closeModal(); });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") closeModal();
+      if (e.target.matches("input,textarea")) return;
+      if (e.key === "r" || e.key === "R") play();
+    });
+    const setMode = m => {
+      state.mode = m;
+      $("#mode-det").setAttribute("aria-pressed", String(m === "det"));
+      $("#mode-prob").setAttribute("aria-pressed", String(m === "prob"));
+      if (m === "prob") state.seed = (Date.now() % 100000) | 0;
+      state.prev = null; evaluate();
+    };
+    $("#mode-det").addEventListener("click", () => setMode("det"));
+    $("#mode-prob").addEventListener("click", () => setMode("prob"));
+  }
+
+  return {
+    async init(){
+      wire();
+      renderScenarios(); renderBrief(); renderMatrix(); renderPosture(); renderPresets();
+      buildTrack(); evaluate();
+      const ok = await Store.open();
+      $("#foot-storage").textContent = ok
+        ? "Stateless — run history stays in this browser's IndexedDB"
+        : "Stateless — storage unavailable, history held in memory only";
+      renderHistory(); bindTips(document);
+    },
+    state
+  };
+})();
+
+document.addEventListener("DOMContentLoaded", () => UI.init());
+</script>
+</body>
+</html>
