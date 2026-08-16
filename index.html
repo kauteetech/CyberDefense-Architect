@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,400..900&family=DM+Sans:opsz,wght@9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ============================================================================
-   CyberDefense Architect — v1.3.0
+   CyberDefense Architect — v1.4.0
    Design tokens. Light base only. Layer hue ramp encodes defence depth
    (outermost = cobalt, innermost = crimson-pink). Outcome semantics are a
    separate, non-overlapping triad: emerald / amber / vermilion.
@@ -380,6 +380,23 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
   transition:border-color .12s,transform .12s;
 }
 .preset:hover{border-color:var(--ink);transform:translateX(2px)}
+.preset.is-on{
+  border-color:var(--ink);border-width:2px;background:var(--paper);
+  padding:8px 10px; /* compensates for the thicker border so the row doesn't shift */
+}
+.preset.is-on b{color:var(--ink)}
+.preset-check{
+  width:20px;height:20px;border-radius:99px;flex:0 0 auto;margin-left:auto;
+  display:grid;place-items:center;background:var(--blocked);color:#fff;
+}
+.preset-check .ic{width:12px;height:12px;stroke-width:3}
+.preset-state{
+  display:flex;align-items:center;gap:7px;margin-bottom:9px;
+  font-family:var(--ff-mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-4);
+}
+.preset-state i{width:7px;height:7px;border-radius:99px;background:var(--line-2);flex:0 0 auto}
+.preset-state.custom i{background:var(--alert)}
 .preset b{font-size:12.2px;font-weight:700;display:block}
 .preset span{font-size:10.5px;color:var(--ink-4);display:block;margin-top:1px;line-height:1.3}
 .preset .ic{color:var(--ink-4);margin-left:auto}
@@ -651,6 +668,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
         <h2>Posture presets</h2>
       </div>
       <div class="panel-bd">
+        <div class="preset-state" id="preset-state"><i></i><span>Custom posture</span></div>
         <div class="presets" id="presets"></div>
       </div>
     </section>
@@ -660,7 +678,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
 <footer class="foot">
   <span class="dot"></span>
   <span id="foot-storage">Stateless &mdash; nothing leaves this browser</span>
-  <span>&middot;</span><span>v1.3.0</span>
+  <span>&middot;</span><span>v1.4.0</span>
   <span>&middot;</span><span>Illustrative model for training. Not a risk assessment.</span>
   <span>&middot;</span><span>Technique and mitigation IDs from MITRE ATT&amp;CK&reg; v19.2, &copy; The MITRE Corporation.</span>
 </footer>
@@ -1716,15 +1734,35 @@ const UI = (() => {
       bar.appendChild(seg);
     });
     $("#ctl-count").textContent = `${state.enabled.size}/${CONTROLS.length}`;
+    if ($("#presets").children.length) renderPresets();
+  }
+
+  /** Which preset, if any, exactly matches the current posture. Derived on
+      every render rather than stored, so switching one control off correctly
+      drops the highlight instead of leaving a stale selection behind. */
+  function activePreset(){
+    return PRESETS.find(p =>
+      p.set.length === state.enabled.size && p.set.every(id => state.enabled.has(id))
+    ) || null;
   }
 
   function renderPresets(){
     const box = $("#presets"); box.innerHTML = "";
+    const active = activePreset();
+
+    const st = $("#preset-state");
+    st.classList.toggle("custom", !active && state.enabled.size > 0);
+    /* An empty posture legitimately matches the "Bare estate" preset, so the
+       zero-controls case is already covered by `active` and needs no branch. */
+    st.querySelector("span").textContent = active ? `Applied: ${active.name}` : "Custom posture";
+
     PRESETS.forEach(p => {
-      const b = el("button", "preset");
+      const on = !!active && active.id === p.id;
+      const b = el("button", "preset" + (on ? " is-on" : ""));
       b.type = "button";
-      b.innerHTML = `<span><b>${esc(p.name)}</b><span>${esc(p.desc)}</span></span>
-        <svg class="ic" style="width:15px;height:15px"><use href="#i-plus"/></svg>`;
+      b.setAttribute("aria-pressed", String(on));
+      b.innerHTML = `<span style="min-width:0"><b>${esc(p.name)}</b><span>${esc(p.desc)}</span></span>
+        ${on ? `<span class="preset-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>` : ""}`;
       b.addEventListener("click", () => {
         state.enabled = new Set(p.set);
         renderMatrix(); renderPosture(); evaluate();
@@ -1831,7 +1869,7 @@ const UI = (() => {
     const on = CONTROLS.filter(c => state.enabled.has(c.id)), off = CONTROLS.filter(c => !state.enabled.has(c.id));
     const L = [];
     L.push(`# CyberDefense Architect — run report`);
-    L.push(`\nGenerated ${new Date().toISOString()} · model v1.3.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
+    L.push(`\nGenerated ${new Date().toISOString()} · model v1.4.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
     L.push(`\n## Scenario\n**${s.name}** — ${s.sub}\n\n${s.brief}`);
     L.push(`\n## Outcome\n- Verdict: **${VERDICT[r.outcome].word}**\n- Reached: step ${r.reached} of ${r.total}\n- Detections: ${r.detections}\n- Time to first detection: ${hrs(r.mttd)}\n- Illustrative impact: $${r.cost.toFixed(1)}M\n- Coverage index: ${p.pct}/100 (${postureWord(p.pct)})`);
     if (r.stopReason) L.push(`- ${r.stopReason}`);
