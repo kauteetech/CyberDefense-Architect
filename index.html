@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,400..900&family=DM+Sans:opsz,wght@9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ============================================================================
-   CyberDefense Architect — v1.4.0
+   CyberDefense Architect — v1.5.0
    Design tokens. Light base only. Layer hue ramp encodes defence depth
    (outermost = cobalt, innermost = crimson-pink). Outcome semantics are a
    separate, non-overlapping triad: emerald / amber / vermilion.
@@ -343,7 +343,8 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
 .lyr-hd:hover{background:var(--paper)}
 .lyr-dot{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
 .lyr-name{font-family:var(--ff-display);font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;flex:1 1 auto}
-.lyr-tally{font-family:var(--ff-mono);font-size:11px;font-weight:700;color:var(--ink-3)}
+.lyr-tally{font-family:var(--ff-mono);font-size:11px;font-weight:700;color:var(--ink-4)}
+.lyr-tally.has{color:var(--lyr,var(--ink))}
 .lyr-chev{color:var(--ink-4);transition:transform .2s}
 .lyr[data-open="false"] .lyr-chev{transform:rotate(-90deg)}
 .lyr[data-open="false"] .lyr-bd{display:none}
@@ -353,7 +354,13 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
 .ctl:first-child{border-top:0}
 .ctl-name{font-weight:700;font-size:12.3px;line-height:1.25;color:var(--ink-2)}
 .ctl-sub{font-size:10.5px;color:var(--ink-4);margin-top:1px;line-height:1.3}
+.ctl.is-on{
+  background:color-mix(in srgb, var(--lyr,var(--ink)) 5%, transparent);
+  border-radius:8px;margin:0 -7px;padding-left:7px;padding-right:7px;
+  box-shadow:inset 3px 0 0 var(--lyr,var(--ink));
+}
 .ctl.is-on .ctl-name{color:var(--ink)}
+.ctl.is-on .ctl-sub{color:var(--ink-3)}
 .info-btn{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink-4);font-size:12px}
 .info-btn:hover{border-color:var(--ink);color:var(--ink)}
 
@@ -368,9 +375,20 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
   content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:99px;
   background:#fff;box-shadow:0 1px 3px rgba(12,18,32,.3);transition:transform .18s cubic-bezier(.3,1.4,.5,1);
 }
-.tgl input:checked + span::after{transform:translateX(18px)}
+/* ON is carried by colour, not just by the knob position. --lyr is set per
+   row from the control's defence layer, so a preset visibly lights up the
+   layers it covers. */
+.tgl input:checked + span{
+  background:var(--lyr,var(--ink));
+  border-color:var(--lyr,var(--ink));
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--lyr,var(--ink)) 16%, transparent);
+}
+.tgl input:checked + span::after{transform:translateX(18px);width:18px;height:18px;top:1.5px}
 .tgl input:focus-visible + span{outline:3px solid var(--l-perimeter);outline-offset:2px}
-.tgl.weak input:checked + span{background:var(--alert);border-color:var(--alert)}
+/* Legacy AV keeps the amber warning colour even when on — the point is that
+   enabling it buys you very little. */
+.tgl.weak input:checked + span{background:var(--alert);border-color:var(--alert);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--alert) 16%, transparent)}
 
 /* ---------- presets ---------- */
 .presets{display:flex;flex-direction:column;gap:6px}
@@ -678,7 +696,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
 <footer class="foot">
   <span class="dot"></span>
   <span id="foot-storage">Stateless &mdash; nothing leaves this browser</span>
-  <span>&middot;</span><span>v1.4.0</span>
+  <span>&middot;</span><span>v1.5.0</span>
   <span>&middot;</span><span>Illustrative model for training. Not a risk assessment.</span>
   <span>&middot;</span><span>Technique and mitigation IDs from MITRE ATT&amp;CK&reg; v19.2, &copy; The MITRE Corporation.</span>
 </footer>
@@ -1690,8 +1708,9 @@ const UI = (() => {
       hd.setAttribute("aria-expanded", wrap.dataset.open);
       hd.innerHTML = `<span class="lyr-dot" style="background:${layer.hex}"></span>
         <span class="lyr-name" style="color:${layer.hex}">${esc(layer.name)}</span>
-        <span class="lyr-tally">${on}/${list.length}</span>
+        <span class="lyr-tally${on ? " has" : ""}">${on}/${list.length}</span>
         <svg class="ic lyr-chev" style="width:15px;height:15px"><use href="#i-chev"/></svg>`;
+      hd.style.setProperty("--lyr", layer.hex);
       hd.dataset.tip = layer.blurb; hd.dataset.tipTitle = layer.name + " layer";
       hd.addEventListener("click", () => {
         state.openLayers.has(layer.id) ? state.openLayers.delete(layer.id) : state.openLayers.add(layer.id);
@@ -1701,6 +1720,7 @@ const UI = (() => {
       const bd = el("div", "lyr-bd");
       list.forEach(c => {
         const row = el("div", "ctl" + (state.enabled.has(c.id) ? " is-on" : ""));
+        row.style.setProperty("--lyr", layer.hex);
         row.innerHTML = `
           <span><span class="ctl-name">${esc(c.name)}</span><span class="ctl-sub">${esc(c.sub)}</span></span>
           <button class="info-btn" type="button" aria-label="About ${esc(c.name)}">
@@ -1869,7 +1889,7 @@ const UI = (() => {
     const on = CONTROLS.filter(c => state.enabled.has(c.id)), off = CONTROLS.filter(c => !state.enabled.has(c.id));
     const L = [];
     L.push(`# CyberDefense Architect — run report`);
-    L.push(`\nGenerated ${new Date().toISOString()} · model v1.4.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
+    L.push(`\nGenerated ${new Date().toISOString()} · model v1.5.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
     L.push(`\n## Scenario\n**${s.name}** — ${s.sub}\n\n${s.brief}`);
     L.push(`\n## Outcome\n- Verdict: **${VERDICT[r.outcome].word}**\n- Reached: step ${r.reached} of ${r.total}\n- Detections: ${r.detections}\n- Time to first detection: ${hrs(r.mttd)}\n- Illustrative impact: $${r.cost.toFixed(1)}M\n- Coverage index: ${p.pct}/100 (${postureWord(p.pct)})`);
     if (r.stopReason) L.push(`- ${r.stopReason}`);
