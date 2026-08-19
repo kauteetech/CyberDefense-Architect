@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,400..900&family=DM+Sans:opsz,wght@9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ============================================================================
-   CyberDefense Architect — v1.5.0
+   CyberDefense Architect — v1.9.0
    Design tokens. Light base only. Layer hue ramp encodes defence depth
    (outermost = cobalt, innermost = crimson-pink). Outcome semantics are a
    separate, non-overlapping triad: emerald / amber / vermilion.
@@ -665,7 +665,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
       <div class="panel-hd">
         <svg class="ic" style="width:16px;height:16px;color:var(--blocked)"><use href="#i-shield-check"/></svg>
         <h2>Defensive layer matrix</h2>
-        <span class="count" id="ctl-count">0/26</span>
+        <span class="count" id="ctl-count">0/28</span>
       </div>
 
       <div class="posture">
@@ -696,7 +696,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
 <footer class="foot">
   <span class="dot"></span>
   <span id="foot-storage">Stateless &mdash; nothing leaves this browser</span>
-  <span>&middot;</span><span>v1.5.0</span>
+  <span>&middot;</span><span>v1.9.0</span>
   <span>&middot;</span><span>Illustrative model for training. Not a risk assessment.</span>
   <span>&middot;</span><span>Technique and mitigation IDs from MITRE ATT&amp;CK&reg; v19.2, &copy; The MITRE Corporation.</span>
 </footer>
@@ -754,12 +754,12 @@ const CONTROLS = [
     mitigation:"M1037 Filter Network Traffic", 
     vendors:["Palo Alto PA-Series","Fortinet FortiGate","Check Point Quantum","Cisco Secure Firewall"],
     caveat:"An NGFW with every rule set to any/any and no decryption is a very expensive router. Efficacy in this model assumes tuned policy." },
-  { id:"ips", layer:"perimeter", name:"Network IPS / threat prevention", sub:"Signature + behavioural inline blocking", weight:4,
-    what:"Inspects permitted traffic for known exploit patterns and blocks the session inline, at the network edge or on the east-west path.",
-    stops:"Exploitation of known CVEs in transit, including against hosts you have not yet patched.",
+  { id:"ips", layer:"perimeter", name:"Perimeter IPS (north-south)", sub:"Inline exploit blocking at the edge only", weight:4,
+    what:"Inspects traffic crossing the perimeter for known exploit patterns and blocks the session inline. It sees north-south flows and nothing else.",
+    stops:"Exploitation of known CVEs arriving from outside, including against hosts you have not yet patched.",
     mitigation:"M1031 Network Intrusion Prevention",
-    vendors:["Palo Alto Threat Prevention","Trend Micro TippingPoint","VMware vDefend IDS/IPS","Snort/Suricata"],
-    caveat:"Signature coverage lags novel exploits by hours to weeks. Treat IPS as compensating control, never as a patching substitute." },
+    vendors:["Palo Alto Threat Prevention","Trend Micro TippingPoint","Check Point IPS","Snort/Suricata"],
+    caveat:"It only inspects what actually traverses it. Workload-to-workload traffic inside a subnet never reaches the perimeter, so this control contributes nothing once an adversary is operating internally. For that you need distributed inspection, which is a separate control in this model. Signature coverage also lags novel exploits by hours to weeks — a compensating control, never a patching substitute." },
   { id:"waf", layer:"perimeter", name:"WAF & API protection", sub:"OWASP Top 10, schema enforcement", weight:4,
     what:"Application-layer proxy that validates requests against an app or API schema and blocks injection, traversal and object-reference abuse.",
     stops:"Exploitation of public-facing applications, broken object-level authorisation, enumeration of API endpoints.",
@@ -817,7 +817,13 @@ const CONTROLS = [
     stops:"Lateral movement. The attacker gets one host and finds that host cannot talk to anything interesting.",
     mitigation:"M1030 Network Segmentation",
     vendors:["VMware vDefend Distributed Firewall (NSX)","Illumio","Akamai Guardicore","Cisco Secure Workload"],
-    caveat:"The technology is rarely the blocker; the application dependency map is. Estates that deploy in monitor mode and never move to enforce get zero protective value." },
+    caveat:"Two structural limits, independent of vendor. First, it decides whether a flow is permitted, not whether a permitted flow is malicious. Second, and more often missed: policy applies BETWEEN groups, not within one. Two workloads in the same security group, EPG, label or tag talk to each other under whatever the group policy allows, and moving laterally inside a group is unaffected by segmentation at any efficacy. Your real protection level is set by group granularity, not by the product. Beyond that, the blocker is rarely the technology and almost always the application dependency map — estates that deploy in monitor mode and never enforce get zero protective value." },
+  { id:"dips", layer:"network", name:"Distributed IDS/IPS (east-west)", sub:"Inline inspection at every workload vNIC", weight:6,
+    what:"Intrusion detection and prevention enforced at each workload's virtual interface, so traffic between two machines on the same subnet is inspected without ever being hairpinned to a perimeter appliance.",
+    stops:"Exploitation and lateral movement that never crosses the perimeter. This is the control that sees the traffic a firewall at the edge is structurally blind to.",
+    mitigation:"M1031 Network Intrusion Prevention",
+    vendors:["VMware vDefend Distributed IDS/IPS","Trend Micro Deep Security","Cisco Secure Workload","Palo Alto VM-Series"],
+    caveat:"Distinct from micro-segmentation, and the two are routinely confused. Segmentation decides whether a flow is allowed; distributed IDS/IPS inspects the flows you allowed. A permitted SMB path carrying an exploit is invisible to segmentation and visible to this. Both, or you are only half covered. Its own limits are real and worth stating: it inspects only where its data plane exists, so bare-metal servers, appliances and anything outside that fabric are uncovered; encrypted east-west traffic defeats payload inspection unless you terminate or decrypt it; signature coverage lags novel exploits exactly as perimeter IPS does; and inspection costs throughput. Where enforcement sits also matters — an in-guest agent runs inside the operating system an attacker with SYSTEM has already taken, while enforcement below the guest does not." },
   { id:"ndr", layer:"network", name:"Network detection & response", sub:"Flow analytics, beacon detection", weight:4,
     what:"Baselines normal east-west and north-south flow behaviour and flags beaconing, scanning, unusual protocol use and volumetric anomalies.",
     stops:"Nothing directly. It shortens dwell time, which is the difference between an incident and a disaster.",
@@ -830,6 +836,12 @@ const CONTROLS = [
     mitigation:"M1037 Filter Network Traffic",
     vendors:["Zscaler Internet Access","Netskope","Palo Alto URL Filtering","Cloudflare Gateway"],
     caveat:"Default-deny outbound is culturally hard. Most organisations that claim egress filtering are running default-allow with a blocklist, which stops known-bad only." },
+  { id:"decoy", layer:"network", name:"Deception & decoys", sub:"Honeypots, decoy shares, honeytokens", weight:3,
+    what:"Fake assets planted through the estate — decoy file shares, dummy service accounts, canary tokens, honeypot hosts — that no legitimate user or process has any reason to touch.",
+    stops:"Nothing. It blocks no technique at all. What it produces is the highest-signal alert available to a defender: an adversary enumerating or moving laterally has no way to tell a decoy from a real asset, and interaction with one is almost never a false positive.",
+    mitigation:"No ATT&CK mitigation maps cleanly — deception is covered by MITRE Engage, the denial and adversary-engagement framework that replaced MITRE Shield",
+    vendors:["Thinkst Canary","Acalvio ShadowPlex","CounterCraft","Zscaler Deception"],
+    caveat:"Detection-only by design, and worthless without someone to act on the alert. Decoys also decay: they must look like the current estate, so an environment that changes faster than its decoys ends up with obviously fake assets an adversary learns to step around. Cheap to start, easy to abandon." },
   { id:"nac", layer:"network", name:"Network access control", sub:"802.1X, posture check on connect", weight:3,
     what:"Devices must authenticate and meet a posture standard before receiving a usable network address; unknown or non-compliant devices land in quarantine.",
     stops:"Rogue and unmanaged devices, and contractor laptops arriving with whatever they were carrying.",
@@ -947,14 +959,14 @@ const SCENARIOS = [
         block:[["ztna",0.62],["mfa",0.75],["nac",0.2]], detect:[["itdr",0.7],["ndr",0.3]] },
       { stage:"Discovery", taId:"TA0007", tech:"Account & Domain Trust Discovery", tid:"T1087,T1482",
         note:"A graphing tool enumerates the directory and computes the shortest path from this user to domain administrator.",
-        block:[], detect:[["itdr",0.55],["edr",0.5],["ndr",0.3]],
+        block:[], detect:[["itdr",0.55],["decoy",0.6],["edr",0.5],["ndr",0.3],["dips",0.35]],
         teach:"Directory enumeration uses ordinary, authenticated LDAP. There is no clean way to block it without breaking the directory, which is why this step is detection-only." },
       { stage:"Privilege escalation", taId:"TA0004", tech:"Use Alternate Authentication Material: Pass-the-Hash", tid:"T1550.002",
         note:"The workstation's local administrator hash is reused against 340 other machines that were imaged from the same gold build.",
-        block:[["laps",0.85],["pam",0.55],["harden",0.35]], detect:[["edr",0.6],["itdr",0.6]] },
+        block:[["laps",0.85],["pam",0.55],["harden",0.35]], detect:[["edr",0.6],["itdr",0.6],["dips",0.4]] },
       { stage:"Lateral movement", taId:"TA0008", tech:"Remote Services: RDP and SMB", tid:"T1021.001,T1021.002",
         note:"Administrative shares on the file cluster are mounted from the compromised workstation.",
-        block:[["microseg",0.85],["nac",0.25]], detect:[["ndr",0.62],["microseg",0.4]],
+        block:[["microseg",0.85],["dips",0.5],["nac",0.25]], detect:[["ndr",0.62],["dips",0.62],["decoy",0.5],["microseg",0.4]],
         teach:"This is the step where micro-segmentation earns its licence cost. A workstation has no business opening SMB to a file cluster's admin share." },
       { stage:"Collection", taId:"TA0009", tech:"Data from Network Shared Drive", tid:"T1039",
         note:"680 GB of HR and contract data is staged into an archive on the compromised host.",
@@ -970,7 +982,7 @@ const SCENARIOS = [
     sub:"Exposed RDP to estate-wide encryption",
     actor:"Ransomware-as-a-service affiliate", target:"Virtualised file and application estate",
     baseCost:64, records:"Full production estate availability",
-    brief:"An affiliate buys access to an exposed remote desktop service, disables endpoint protection, deletes shadow copies and backups, then encrypts at the storage layer. The decisive control is not detection — it is whether the backups were reachable from the production credential.",
+    brief:"An affiliate buys access to an exposed remote desktop service, disables endpoint protection, moves laterally by exploiting an internal service over an already-permitted port, deletes shadow copies and backups, then encrypts at the storage layer. Two decisive controls: whether anything inspects east-west traffic, and whether the backups were reachable from the production credential.",
     steps:[
       { stage:"Initial access", taId:"TA0001", tech:"External Remote Services", tid:"T1133",
         note:"A remote desktop gateway is directly published to the internet with password-only authentication.",
@@ -981,13 +993,18 @@ const SCENARIOS = [
       { stage:"Defence evasion", taId:"TA0005", tech:"Impair Defenses: Disable or Modify Tools", tid:"T1562.001",
         note:"The operator attempts to stop security services and uninstall the endpoint agent using a signed vulnerable driver.",
         block:[["edr",0.62],["harden",0.35],["appctrl",0.45]], detect:[["edr",0.7]],
-        teach:"Tamper protection is a configuration choice, not a default in every deployment. An EDR that can be uninstalled by a local administrator is a logging tool." },
+        teach:"Tamper protection is a configuration choice, not a default in every deployment. An EDR that can be uninstalled by a local administrator is a logging tool. The general principle is where a control sits relative to the operating system the adversary now owns: anything enforced by an in-guest agent — endpoint protection, host firewalls, agent-based segmentation — is reachable by an attacker holding SYSTEM on that guest, and agents themselves carry vulnerabilities that grant elevation. Enforcement below the guest, in the hypervisor or the fabric, is not reachable from inside it. Note which of your controls sit on which side of that line." },
       { stage:"Discovery", taId:"TA0007", tech:"Network Share Discovery", tid:"T1135",
         note:"Every reachable share, hypervisor management interface and backup console is enumerated.",
-        block:[["microseg",0.5]], detect:[["ndr",0.45],["dam",0.3]] },
+        block:[["microseg",0.5],["dips",0.3]], detect:[["ndr",0.45],["dips",0.55],["decoy",0.65],["dam",0.3]] },
+      { stage:"Lateral movement", taId:"TA0008", tech:"Exploitation of Remote Services", tid:"T1210",
+        note:"An unpatched internal service is exploited over port 445 — a port already permitted between these two workloads for legitimate file access. No credentials are used.",
+        block:[["dips",0.7],["vpatch",0.65],["patch",0.55],["microseg",0.2]],
+        detect:[["dips",0.7],["edr",0.55],["decoy",0.4],["ndr",0.45]],
+        teach:"Assume both workloads sit in the SAME security group — same EPG, label or tag — which is the common case in an estate segmented at application-tier granularity. Perimeter IPS is deliberately absent from this step. The flow never crosses the perimeter, so an edge appliance cannot inspect it at any price. Micro-segmentation scores only 0.20 because the port is already allowed — segmentation decides whether a flow is permitted, not whether a permitted flow is an exploit. Distinguish this from the next step: T1021 uses valid credentials over a legitimate protocol, T1210 exploits a vulnerability and needs no credentials at all." },
       { stage:"Lateral movement", taId:"TA0008", tech:"Remote Services: SMB / Windows Admin Shares", tid:"T1021.002",
         note:"The payload is copied to servers and to the hypervisor management network using harvested credentials.",
-        block:[["microseg",0.82],["laps",0.55],["pam",0.5]], detect:[["ndr",0.6]] },
+        block:[["microseg",0.82],["dips",0.52],["laps",0.55],["pam",0.5]], detect:[["ndr",0.6],["dips",0.6],["decoy",0.5]] },
       { stage:"Impact", taId:"TA0040", tech:"Inhibit System Recovery", tid:"T1490",
         note:"Volume shadow copies are deleted and the backup catalogue is targeted with the same domain credential used everywhere else.",
         block:[["backup",0.9],["pam",0.4]], detect:[["edr",0.6],["dam",0.4]],
@@ -997,7 +1014,7 @@ const SCENARIOS = [
         block:[["egress",0.55],["dlp",0.6]], detect:[["dlp",0.65],["ndr",0.55]] },
       { stage:"Impact", taId:"TA0040", tech:"Data Encrypted for Impact", tid:"T1486",
         note:"Encryption is executed across file servers and virtual machine datastores over a weekend.",
-        block:[["edr",0.65],["appctrl",0.5],["microseg",0.3]], detect:[["edr",0.8],["ndr",0.5]] }
+        block:[["edr",0.65],["appctrl",0.5],["microseg",0.3]], detect:[["edr",0.8],["ndr",0.5],["dips",0.45]] }
     ]
   },
 
@@ -1065,8 +1082,9 @@ const SCENARIOS = [
         note:"Credentials are read out of process memory, including a cached domain administrator session from a recent helpdesk visit.",
         block:[["edr",0.8],["harden",0.5],["pam",0.5]], detect:[["edr",0.78],["itdr",0.5]] },
       { stage:"Lateral movement", taId:"TA0008", tech:"Remote Services", tid:"T1021",
-        note:"The recovered domain administrator credential is used to reach the payment approval systems.",
-        block:[["microseg",0.75],["pam",0.6],["laps",0.4]], detect:[["ndr",0.6],["itdr",0.65]] }
+        note:"The recovered domain administrator credential is used to reach the payment approval systems over WinRM, encrypted end to end with a certificate the estate itself issued.",
+        block:[["microseg",0.75],["dips",0.45],["pam",0.6],["laps",0.4]], detect:[["ndr",0.6],["dips",0.55],["itdr",0.65]],
+        teach:"Compare this step with the exploit step in the ransomware scenario. Distributed IDS/IPS scores 0.45 here rather than 0.70, and cannot block on its own, because the session is encrypted and payload inspection has nothing to read. Unless you terminate or decrypt east-west TLS — which most estates do not — inspection degrades to metadata, and detection falls to behavioural analysis of volume, timing and peer relationships. Encryption is not only the defender's tool." }
     ]
   },
 
@@ -1086,7 +1104,7 @@ const SCENARIOS = [
         block:[["pdns",0.65]], detect:[["pdns",0.6],["ndr",0.5]] },
       { stage:"Discovery", taId:"TA0007", tech:"File and Directory Discovery", tid:"T1083",
         note:"Design repositories and CAD stores are located and indexed.",
-        block:[["microseg",0.45],["drm",0.2]], detect:[["edr",0.5],["dam",0.4]] },
+        block:[["microseg",0.45],["drm",0.2]], detect:[["edr",0.5],["dam",0.4],["dips",0.4],["decoy",0.55]] },
       { stage:"Collection", taId:"TA0009", tech:"Archive Collected Data", tid:"T1560",
         note:"Files are compressed, encrypted and split into 180-byte fragments sized for DNS label encoding.",
         block:[["dlp",0.3],["appctrl",0.25]], detect:[["edr",0.55],["dlp",0.35]],
@@ -1121,18 +1139,18 @@ const SCENARIOS = [
         teach:"Run this step with patching OFF and virtual patching ON. The chain still breaks. That is the entire argument for compensating controls during the change-window gap." },
       { stage:"Persistence", taId:"TA0003", tech:"Server Software Component: Web Shell", tid:"T1505.003",
         note:"A web shell is written to the appliance filesystem, surviving reboot and the eventual patch.",
-        block:[["appctrl",0.6],["edr",0.5],["harden",0.35]], detect:[["edr",0.6],["ips",0.35]],
+        block:[["appctrl",0.6],["edr",0.5],["vpatch",0.35],["harden",0.35]], detect:[["edr",0.6],["ips",0.35],["dips",0.4]],
         teach:"Patching after compromise does not remove the implant. This is why 'we patched it' is not the same as 'we are clean'." },
       { stage:"Privilege escalation", taId:"TA0004", tech:"Exploitation for Privilege Escalation", tid:"T1068",
         note:"A local kernel flaw takes the web shell to root on the appliance.",
-        block:[["patch",0.82],["vpatch",0.58],["harden",0.4]], detect:[["edr",0.5]] },
+        block:[["patch",0.82],["vpatch",0.58],["harden",0.4]], detect:[["edr",0.5],["dips",0.3]] },
       { stage:"Credential access", taId:"TA0006", tech:"Unsecured Credentials in Files", tid:"T1552.001",
         note:"Service account credentials for the virtualisation platform are recovered from configuration on disk.",
         block:[["pam",0.65],["crypto",0.3],["harden",0.35]], detect:[["itdr",0.5]] },
       { stage:"Lateral movement", taId:"TA0008", tech:"Use Alternate Authentication Material", tid:"T1550",
         note:"Those credentials authenticate to the hypervisor management plane, giving control of every hosted workload at once.",
-        block:[["microseg",0.72],["pam",0.6],["mfa",0.5]], detect:[["ndr",0.55],["itdr",0.6]],
-        teach:"Compromise of the virtualisation control plane is a single step that owns every guest. Segmenting and vaulting management access is disproportionately valuable." },
+        block:[["microseg",0.72],["dips",0.55],["vpatch",0.42],["pam",0.6],["mfa",0.5]], detect:[["ndr",0.55],["dips",0.6],["itdr",0.6]],
+        teach:"Compromise of the virtualisation control plane is a single step that owns every guest. Segmenting and vaulting management access is disproportionately valuable — and note that this entire step happens inside the estate, where a perimeter appliance has no visibility whatsoever." },
       { stage:"Impact", taId:"TA0040", tech:"Data Encrypted for Impact", tid:"T1486",
         note:"Datastores are encrypted at the hypervisor layer, bypassing every in-guest agent simultaneously.",
         block:[["backup",0.85],["microseg",0.35]], detect:[["ndr",0.5]] }
@@ -1150,9 +1168,9 @@ const PRESETS = [
   { id:"mid", name:"Typical mid-market 2026", desc:"Good endpoint and mail, weak east-west and identity.",
     set:["ngfw","ips","email","pdns","edr","patch","harden","backup","av","mfa"] },
   { id:"vcf", name:"Virtualisation-led stack", desc:"Segmentation and workload defence at the platform layer.",
-    set:["ngfw","ips","microseg","vpatch","edr","patch","harden","backup","ndr","crypto","email"] },
+    set:["ngfw","ips","microseg","dips","vpatch","edr","patch","harden","backup","ndr","crypto","email"] },
   { id:"zt", name:"Mature zero trust", desc:"Identity-first, default-deny, tested recovery.",
-    set:["ztna","mfa","pam","itdr","laps","microseg","ndr","egress","edr","patch","appctrl","harden","backup","dlp","dam","email","pdns","waf","rate"] },
+    set:["ztna","mfa","pam","itdr","laps","microseg","dips","ndr","decoy","egress","edr","patch","appctrl","harden","backup","dlp","dam","email","pdns","waf","rate"] },
   { id:"all", name:"Everything enabled", desc:"Unrealistic, but useful for showing residual risk.",
     set:CONTROLS.map(c => c.id) }
 ];
@@ -1838,7 +1856,7 @@ const UI = (() => {
         <div class="vendors">${CONTROLS.filter(c => c.layer === l.id)
           .map(c => `<button class="vendor" type="button" data-ctl="${c.id}" style="cursor:pointer">${esc(c.name)}</button>`).join("")}</div>
       </div>`).join("");
-    openModal("Reference knowledge base", "All 26 controls", html);
+    openModal("Reference knowledge base", `All ${CONTROLS.length} controls`, html);
     $("#modal-bd").querySelectorAll("[data-ctl]").forEach(b => b.addEventListener("click", () => openControl(b.dataset.ctl)));
   }
   /** The citation map. Sourced claims first, then an explicit list of what
@@ -1889,7 +1907,7 @@ const UI = (() => {
     const on = CONTROLS.filter(c => state.enabled.has(c.id)), off = CONTROLS.filter(c => !state.enabled.has(c.id));
     const L = [];
     L.push(`# CyberDefense Architect — run report`);
-    L.push(`\nGenerated ${new Date().toISOString()} · model v1.5.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
+    L.push(`\nGenerated ${new Date().toISOString()} · model v1.9.0 · ${state.mode === "det" ? "deterministic" : "probabilistic (seed " + state.seed + ")"}`);
     L.push(`\n## Scenario\n**${s.name}** — ${s.sub}\n\n${s.brief}`);
     L.push(`\n## Outcome\n- Verdict: **${VERDICT[r.outcome].word}**\n- Reached: step ${r.reached} of ${r.total}\n- Detections: ${r.detections}\n- Time to first detection: ${hrs(r.mttd)}\n- Illustrative impact: $${r.cost.toFixed(1)}M\n- Coverage index: ${p.pct}/100 (${postureWord(p.pct)})`);
     if (r.stopReason) L.push(`- ${r.stopReason}`);
